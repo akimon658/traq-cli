@@ -8,7 +8,7 @@ import (
 
 const (
 	DefaultOrigin   = "https://q.trap.jp"
-	DefaultClientID = ""
+	DefaultClientID = "KVx4KotnCInpZ2zmh9YXzcnxAP0BPnOE5vz5"
 
 	authorizePath = "/api/v3/oauth2/authorize"
 	tokenPath     = "/api/v3/oauth2/token"
