@@ -14,13 +14,22 @@ import (
 type Env struct {
 	Origin   string
 	ClientID string
+	Store    auth.Store
 }
 
 func NewEnv() *Env {
 	return &Env{
 		Origin:   firstNonEmpty(flagOrigin, os.Getenv("TRAQ_ORIGIN"), auth.DefaultOrigin),
 		ClientID: firstNonEmpty(flagClientID, os.Getenv("TRAQ_CLIENT_ID"), auth.DefaultClientID),
+		Store:    auth.NewDefaultStore(),
 	}
+}
+
+func (e *Env) store() auth.Store {
+	if e.Store == nil {
+		return auth.NewDefaultStore()
+	}
+	return e.Store
 }
 
 func firstNonEmpty(ss ...string) string {
@@ -49,7 +58,7 @@ func (e *Env) resolveToken() (ResolvedToken, error) {
 			Source: source,
 		}, nil
 	}
-	stored, source, found, err := auth.Load()
+	stored, source, found, err := e.store().Load()
 	if err != nil {
 		return ResolvedToken{}, err
 	}
@@ -68,13 +77,13 @@ func (e *Env) resolveToken() (ResolvedToken, error) {
 		}
 		nt, rerr := auth.Refresh(context.Background(), e.OriginOf(&stored), e.ClientID, stored)
 		if rerr != nil {
-			_, _ = auth.Delete()
+			_, _ = e.store().Delete()
 			return ResolvedToken{}, &ExitCodeError{
 				exitAuthRequired,
 				fmt.Errorf("refresh failed: %v; run 'traq auth login'", rerr),
 			}
 		}
-		if _, serr := auth.Save(nt); serr != nil {
+		if _, serr := e.store().Save(nt); serr != nil {
 			return ResolvedToken{}, serr
 		}
 		stored = nt
@@ -106,7 +115,7 @@ func (e *Env) apiExec(
 				),
 			}
 		}
-		if _, serr := auth.Save(nt); serr != nil {
+		if _, serr := e.store().Save(nt); serr != nil {
 			return serr
 		}
 		*rt.Token = nt

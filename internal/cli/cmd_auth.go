@@ -96,7 +96,7 @@ func loginWithToken(e *Env, value string) error {
 	} else {
 		t.Method = auth.MethodOAuth
 	}
-	venue, err := auth.Save(t)
+	venue, err := e.store().Save(t)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func loginWithBrowser(e *Env, scopeFlag string) error {
 	if resp.ExpiresIn > 0 {
 		t.ExpiresAt = time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
 	}
-	venue, err := auth.Save(t)
+	venue, err := e.store().Save(t)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func loginWithBrowser(e *Env, scopeFlag string) error {
 
 func runLogout(_ *cobra.Command, _ []string) error {
 	e := NewEnv()
-	stored, _, found, err := auth.Load()
+	stored, _, found, err := e.store().Load()
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func runLogout(_ *cobra.Command, _ []string) error {
 			fmt.Fprintln(os.Stderr, "failed to revoke the token on the server:", rerr)
 		}
 	}
-	if _, err := auth.Delete(); err != nil {
+	if _, err := e.store().Delete(); err != nil {
 		return err
 	}
 	fmt.Println("logged out")

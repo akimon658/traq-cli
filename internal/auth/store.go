@@ -30,26 +30,51 @@ const (
 	credentialsFilePerm = 0o600
 )
 
-func StorePath() (string, error) {
-	dir, err := os.UserConfigDir()
+type Store interface {
+	Save(t Token) (string, error)
+	Load() (Token, string, bool, error)
+	Delete() (bool, error)
+}
+
+func NewDefaultStore() Store {
+	return defaultStore{
+		openKeyring:   openDefaultKeyring,
+		userConfigDir: os.UserConfigDir,
+	}
+}
+
+func openDefaultKeyring() (keyring.Keyring, error) {
+	return keyring.Open(keyring.Config{
+		ServiceName:     storeService,
+		AllowedBackends: storeBackends,
+	})
+}
+
+type defaultStore struct {
+	openKeyring   func() (keyring.Keyring, error)
+	userConfigDir func() (string, error)
+}
+
+func (s defaultStore) filePath() (string, error) {
+	dir, err := s.userConfigDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, "traq-cli", "credentials"), nil
 }
 
-func Save(t Token) (string, error) {
+func (s defaultStore) Save(t Token) (string, error) {
 	data, err := json.Marshal(t)
 	if err != nil {
 		return "", err
 	}
-	if venue := saveKeyring(data); venue != "" {
-		if path, ferr := StorePath(); ferr == nil {
+	if venue := s.saveKeyring(data); venue != "" {
+		if path, ferr := s.filePath(); ferr == nil {
 			_ = os.Remove(path)
 		}
 		return venue, nil
 	}
-	path, err := StorePath()
+	path, err := s.filePath()
 	if err != nil {
 		return "", err
 	}
@@ -62,11 +87,9 @@ func Save(t Token) (string, error) {
 	return storeSourceFile, nil
 }
 
-func Load() (Token, string, bool, error) {
+func (s defaultStore) Load() (Token, string, bool, error) {
 	var zero Token
-	if r, err := keyring.Open(
-		keyring.Config{ServiceName: storeService, AllowedBackends: storeBackends},
-	); err == nil {
+	if r, err := s.openKeyring(); err == nil {
 		item, e := r.Get(storeItem)
 		if e == nil {
 			var t Token
@@ -84,7 +107,7 @@ func Load() (Token, string, bool, error) {
 			return zero, "", false, e
 		}
 	}
-	path, err := StorePath()
+	path, err := s.filePath()
 	if err != nil {
 		return zero, "", false, err
 	}
@@ -107,17 +130,15 @@ func Load() (Token, string, bool, error) {
 	return t, storeSourceFile, true, nil
 }
 
-func Delete() (bool, error) {
+func (s defaultStore) Delete() (bool, error) {
 	found := false
-	if r, err := keyring.Open(
-		keyring.Config{ServiceName: storeService, AllowedBackends: storeBackends},
-	); err == nil {
+	if r, err := s.openKeyring(); err == nil {
 		if _, e := r.Get(storeItem); e == nil {
 			found = true
 		}
 		_ = r.Remove(storeItem)
 	}
-	path, err := StorePath()
+	path, err := s.filePath()
 	if err != nil {
 		return found, err
 	}
@@ -130,11 +151,8 @@ func Delete() (bool, error) {
 	return found, nil
 }
 
-func saveKeyring(data []byte) string {
-	r, err := keyring.Open(keyring.Config{
-		ServiceName:     storeService,
-		AllowedBackends: storeBackends,
-	})
+func (s defaultStore) saveKeyring(data []byte) string {
+	r, err := s.openKeyring()
 	if err != nil {
 		return ""
 	}
