@@ -17,45 +17,9 @@ traQ の UI 上で人間が行える操作と同等のことを、AI エージ�
 
 traQ で UI からできることと同等の操作を、段階的に提供していく予定です。
 
-## ローカルで traQ を動かす
-
-Docker Compose で traQ とそのデータベース (MariaDB) をローカルに立てられます。
-
-```sh
-docker compose up -d traq_server
-# traQ サーバーが http://localhost:3000 で起動する
-# (ポートが使えない場合は TRAQ_SERVER_PORT=3001 docker compose up -d traq_server のように上書きできます)
-```
-
-traQ の初期データとして `traq` / `traq` という管理者ユーザーと `#general` チャンネルが自動的に作成されます。
-
-CLI から使う例:
-
-```sh
-go build -o traq .
-./traq --origin http://localhost:3000 users me --token <アクセストークン>
-```
-
-権限・データは `compose.yaml` の volume (`mariadb_data`, `traq_storage`) に永続化されます。消したい場合は:
-
-```sh
-docker compose down --volumes
-```
-
-## テスト
-
-```sh
-go test ./...
-```
-
-`internal/cli` のテストは Testcontainers で実 traQ サーバー (compose.yaml) を自動的に起動し、
-CLI コマンドの実行結果を検証します。Docker が必要で、起動待ちなどにより完了まで1〜2分かかります。
-
-- Docker が無い環境や素早く回したい場合は `go test -short ./...` で統合テストをスキップできます。
-
 ## ドキュメント
 
-- [認証設計](./docs/auth.md)
+詳しくは [ドキュメント](./docs/README.md) を参照してください。
 
 ## ステータス
 
