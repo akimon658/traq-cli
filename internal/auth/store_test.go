@@ -9,48 +9,8 @@ import (
 	"github.com/99designs/keyring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
-
-type fakeKeyring struct {
-	items map[string][]byte
-}
-
-func newFakeKeyring() *fakeKeyring {
-	return &fakeKeyring{items: map[string][]byte{}}
-}
-
-func (f *fakeKeyring) Get(key string) (keyring.Item, error) {
-	data, ok := f.items[key]
-	if !ok {
-		return keyring.Item{}, keyring.ErrKeyNotFound
-	}
-	return keyring.Item{Key: key, Data: data}, nil
-}
-
-func (f *fakeKeyring) GetMetadata(key string) (keyring.Metadata, error) {
-	if _, ok := f.items[key]; !ok {
-		return keyring.Metadata{}, keyring.ErrKeyNotFound
-	}
-	return keyring.Metadata{Item: &keyring.Item{Key: key}}, nil
-}
-
-func (f *fakeKeyring) Set(item keyring.Item) error {
-	f.items[item.Key] = item.Data
-	return nil
-}
-
-func (f *fakeKeyring) Remove(key string) error {
-	delete(f.items, key)
-	return nil
-}
-
-func (f *fakeKeyring) Keys() ([]string, error) {
-	keys := make([]string, 0, len(f.items))
-	for k := range f.items {
-		keys = append(keys, k)
-	}
-	return keys, nil
-}
 
 func testStore(t *testing.T, kr keyring.Keyring, openErr error) defaultStore {
 	t.Helper()
@@ -135,7 +95,33 @@ func assertRoundTrip(t *testing.T, s defaultStore, wantSource string, verify fun
 }
 
 func TestDefaultStoreRoundTripViaKeyring(t *testing.T) {
-	kr := newFakeKeyring()
+	kr := NewMockKeyring(gomock.NewController(t))
+	var stored []byte
+	setItem := func(item keyring.Item) error {
+		stored = item.Data
+		return nil
+	}
+	getItem := func(string) (keyring.Item, error) {
+		if stored == nil {
+			return keyring.Item{}, keyring.ErrKeyNotFound
+		}
+		return keyring.Item{Key: storeItem, Data: stored}, nil
+	}
+	removeItem := func(string) error {
+		stored = nil
+		return nil
+	}
+	gomock.InOrder(
+		kr.EXPECT().Set(gomock.Any()).DoAndReturn(setItem).Times(1),
+		kr.EXPECT().Get(storeItem).DoAndReturn(getItem).Times(1),
+		kr.EXPECT().Set(gomock.Any()).DoAndReturn(setItem).Times(1),
+		kr.EXPECT().Get(storeItem).DoAndReturn(getItem).Times(1),
+		kr.EXPECT().Get(storeItem).DoAndReturn(getItem).Times(1),
+		kr.EXPECT().Remove(storeItem).DoAndReturn(removeItem).Times(1),
+		kr.EXPECT().Get(storeItem).DoAndReturn(getItem).Times(1),
+		kr.EXPECT().Get(storeItem).DoAndReturn(getItem).Times(1),
+		kr.EXPECT().Remove(storeItem).DoAndReturn(removeItem).Times(1),
+	)
 	s := testStore(t, kr, nil)
 	path, err := s.filePath()
 	require.NoError(t, err)
@@ -164,7 +150,13 @@ func TestDefaultStoreFileFallback(t *testing.T) {
 }
 
 func TestDefaultStoreNotFound(t *testing.T) {
-	s := testStore(t, newFakeKeyring(), nil)
+	kr := NewMockKeyring(gomock.NewController(t))
+	gomock.InOrder(
+		kr.EXPECT().Get(storeItem).Return(keyring.Item{}, keyring.ErrKeyNotFound).Times(1),
+		kr.EXPECT().Get(storeItem).Return(keyring.Item{}, keyring.ErrKeyNotFound).Times(1),
+		kr.EXPECT().Remove(storeItem).Return(nil).Times(1),
+	)
+	s := testStore(t, kr, nil)
 	_, _, found, err := s.Load()
 	require.NoError(t, err)
 	assert.False(t, found, "found = true, want false when nothing is stored")

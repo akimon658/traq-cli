@@ -30,6 +30,9 @@ const (
 	credentialsFilePerm = 0o600
 )
 
+//go:generate go tool mockgen -destination=mock_store.go -package=auth github.com/akimon658/traq-cli/internal/auth Store
+//go:generate go tool mockgen -destination=mock_keyring.go -package=auth github.com/99designs/keyring Keyring
+
 type Store interface {
 	Save(t Token) (string, error)
 	Load() (Token, string, bool, error)

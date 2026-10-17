@@ -10,6 +10,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/compose v0.44.0
 	github.com/traPtitech/go-traq v0.0.0-20260820123008-a8cecf494070
+	go.uber.org/mock v0.6.0
 )
 
 require (
@@ -140,6 +141,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
@@ -147,6 +149,7 @@ require (
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/tools v0.47.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/grpc v1.82.1 // indirect
@@ -157,3 +160,5 @@ require (
 	gotest.tools/v3 v3.5.2 // indirect
 	tags.cncf.io/container-device-interface v1.1.0 // indirect
 )
+
+tool go.uber.org/mock/mockgen

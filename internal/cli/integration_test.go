@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/compose"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"go.uber.org/mock/gomock"
 
 	"github.com/akimon658/traq-cli/internal/auth"
 )
@@ -344,25 +345,33 @@ func TestAuthStatus(t *testing.T) {
 
 func TestAuthLoginTokenAndLogout(t *testing.T) {
 	requireTraqStack(t)
-	fs := &fakeStore{}
-	overrideEnv(t, fs)
+	ms := auth.NewMockStore(gomock.NewController(t))
+	var saved auth.Token
+	gomock.InOrder(
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+			saved = tok
+			return "keychain", nil
+		}).Times(1),
+		ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+			return saved, "keychain", true, nil
+		}).Times(1),
+		ms.EXPECT().Delete().Return(true, nil).Times(1),
+		ms.EXPECT().Load().Return(auth.Token{}, "", false, nil).Times(1),
+	)
+	overrideEnv(t, ms)
 
 	out, err := runCLI(t, "auth", "login", "--token", testTraqToken)
 	require.NoError(t, err, "auth login failed")
 	assert.Contains(t, out, "signed in: @")
-	assert.Equal(t, 1, fs.saves, "store.Save called %d times, want 1", fs.saves)
-	tok := fs.token
+	tok := saved
 	assert.Equal(t, testTraqToken, tok.AccessToken)
 	assert.Equal(t, auth.MethodBot, tok.Method)
 	assert.NotEmpty(t, tok.UserName, "userName is empty")
 	assert.Equal(t, testTraqOrigin, tok.Origin)
 
-	fs.found = true
-
 	out, err = runCLI(t, "auth", "logout")
 	require.NoError(t, err, "auth logout failed")
 	assert.Contains(t, out, "logged out")
-	assert.Equal(t, 1, fs.deletes, "store.Delete called %d times, want 1", fs.deletes)
 
 	_, err = runCLI(t, "auth", "logout")
 	var ec *ExitCodeError
@@ -372,8 +381,8 @@ func TestAuthLoginTokenAndLogout(t *testing.T) {
 
 func TestAuthLoginInvalidToken(t *testing.T) {
 	requireTraqStack(t)
-	fs := &fakeStore{}
-	overrideEnv(t, fs)
+	ms := auth.NewMockStore(gomock.NewController(t))
+	overrideEnv(t, ms)
 
 	_, err := runCLI(t, "auth", "login", "--token", "invalid")
 	require.Error(t, err, "expected an error for the invalid token")
@@ -381,13 +390,12 @@ func TestAuthLoginInvalidToken(t *testing.T) {
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, exitGeneral, ec.Code)
 	assert.Contains(t, err.Error(), "the token was rejected")
-	assert.Zero(t, fs.saves, "store.Save called %d times, want 0", fs.saves)
 }
 
-func overrideEnv(t *testing.T, fs *fakeStore) {
+func overrideEnv(t *testing.T, ms *auth.MockStore) {
 	t.Helper()
 	old := newEnv
-	newEnv = func() *Env { return &Env{Origin: testTraqOrigin, ClientID: "test", Store: fs} }
+	newEnv = func() *Env { return &Env{Origin: testTraqOrigin, ClientID: "test", Store: ms} }
 	t.Cleanup(func() { newEnv = old })
 }
 
