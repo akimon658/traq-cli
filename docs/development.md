@@ -15,8 +15,7 @@ traQ の初期データとして `traq` / `traq` という管理者ユーザー�
 CLI から使う例:
 
 ```sh
-go build -o traq .
-./traq --origin http://localhost:3000 users me --token <アクセストークン>
+go run ./cmd/traq --origin http://localhost:3000 users me --token <アクセストークン>
 ```
 
 権限・データは `compose.yaml` の volume (`mariadb_data`, `traq_storage`) に永続化される。消したい場合は:

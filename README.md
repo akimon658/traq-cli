@@ -2,6 +2,12 @@
 
 [traQ](https://github.com/traPtitech/traQ) を操作するための CLI ツールです。
 
+## インストール
+
+```sh
+go install github.com/akimon658/traq-cli/cmd/traq@latest
+```
+
 ## 目的
 
 traQ の UI 上で人間が行える操作と同等のことを、AI エージェントが実行できるようにすることを目的としています。
