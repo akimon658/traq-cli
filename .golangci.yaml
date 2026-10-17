@@ -1,0 +1,22 @@
+version: "2"
+
+linters:
+  enable:
+    - mnd
+    - revive
+  settings:
+    revive:
+      rules:
+        - name: unused-parameter
+          severity: error
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - golines
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/akimon658/traq-cli
