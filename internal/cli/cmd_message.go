@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/traPtitech/go-traq"

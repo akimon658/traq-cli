@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -42,7 +42,7 @@ func createOAuthClient(t *testing.T, sess *http.Cookie) string {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{
 		// traQ のクライアント名には 1〜32 文字の制限がある
-		"name":        "cli-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:27],
+		"name":        "cli-" + strings.ReplaceAll(uuid.New().String(), "-", "")[:27],
 		"description": "traQ CLI integration test client",
 		"callbackUrl": "http://127.0.0.1/callback",
 		"scopes":      []string{auth.ScopeRead, auth.ScopeWrite},

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +36,7 @@ func TestMessageSearch(t *testing.T) {
 	requireTraqStack(t)
 
 	e := botEnv(t, testTraqToken)
-	tag := strings.ReplaceAll(uuid.NewString(), "-", "")
+	tag := strings.ReplaceAll(uuid.New().String(), "-", "")
 	content := "search-" + tag
 	_, err := runCLI(t, e, "message", "send", "#general", content)
 	require.NoError(t, err, "message send failed")
@@ -54,7 +54,7 @@ func TestMessageSearchInAndFrom(t *testing.T) {
 	requireTraqStack(t)
 
 	e := botEnv(t, testTraqToken)
-	tag := strings.ReplaceAll(uuid.NewString(), "-", "")
+	tag := strings.ReplaceAll(uuid.New().String(), "-", "")
 	content := "searchfilter-" + tag
 	_, err := runCLI(t, e, "message", "send", "#general", content)
 	require.NoError(t, err, "message send failed")

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -75,7 +75,7 @@ func TestMessageList(t *testing.T) {
 	requireTraqStack(t)
 
 	e := botEnv(t, testTraqToken)
-	tag := strings.ReplaceAll(uuid.NewString(), "-", "")
+	tag := strings.ReplaceAll(uuid.New().String(), "-", "")
 	first := "list-" + tag + "-first"
 	second := "list-" + tag + "-second"
 	for _, content := range []string{first, second} {
@@ -103,7 +103,7 @@ func TestMessageListLimitSummary(t *testing.T) {
 	requireTraqStack(t)
 
 	e := botEnv(t, testTraqToken)
-	_, err := runCLI(t, e, "message", "send", "#general", "list-limit-"+uuid.NewString())
+	_, err := runCLI(t, e, "message", "send", "#general", "list-limit-"+uuid.New().String())
 	require.NoError(t, err, "message send failed")
 
 	out, err := runCLI(
