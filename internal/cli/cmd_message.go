@@ -70,7 +70,11 @@ func newMessageCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 			return printJSON(cmd.OutOrStdout(), msg)
 		},
 	}
-	messageCmd.AddCommand(sendMessageCmd, newMessageListCmd(newEnv, flags))
+	messageCmd.AddCommand(
+		sendMessageCmd,
+		newMessageListCmd(newEnv, flags),
+		newMessageSearchCmd(newEnv, flags),
+	)
 	return messageCmd
 }
 

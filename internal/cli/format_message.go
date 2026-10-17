@@ -20,6 +20,9 @@ type messageList struct {
 	stamps map[string]string
 	loc    *time.Location
 	unread *traq.UnreadChannel
+	// totalHits が nil でなければ検索結果として表示する。
+	totalHits *int64
+	sort      string
 }
 
 // writeMessageList はメッセージ一覧を可読性の高いテキストで出力する。
@@ -34,7 +37,14 @@ func writeMessageList(w io.Writer, ml messageList) error {
 		return msgs[i].Id < msgs[j].Id
 	})
 
-	if _, err := fmt.Fprintf(
+	if ml.totalHits != nil {
+		if _, err := fmt.Fprintf(
+			w, "%s (全%d件中 %d件 limit=%d offset=%d sort=%s)\n\n",
+			ml.label, *ml.totalHits, len(msgs), ml.limit, ml.offset, ml.sort,
+		); err != nil {
+			return err
+		}
+	} else if _, err := fmt.Fprintf(
 		w, "%s (%d件 limit=%d offset=%d order=%s)\n\n",
 		ml.label, len(msgs), ml.limit, ml.offset, ml.order,
 	); err != nil {

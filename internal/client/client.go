@@ -89,6 +89,82 @@ func (c *Client) GetChannelMessages(
 	return req.Execute()
 }
 
+// SearchQuery はメッセージ検索 (GET /messages) のパラメータ。
+// ポインタのフィールドは未指定 (API に送らない) を表す。
+type SearchQuery struct {
+	Word           string
+	After          *time.Time
+	Before         *time.Time
+	In             string
+	InSet          bool
+	To             []string
+	ToSet          bool
+	From           []string
+	FromSet        bool
+	Citation       string
+	CitationSet    bool
+	Bot            *bool
+	HasURL         *bool
+	HasAttachments *bool
+	HasImage       *bool
+	HasVideo       *bool
+	HasAudio       *bool
+	Limit          int32
+	Offset         int32
+	Sort           string
+}
+
+// SearchMessages はメッセージを検索する。トークンは ctx から解決される。
+func (c *Client) SearchMessages(
+	ctx context.Context,
+	q SearchQuery,
+) (*traq.MessageSearchResult, *http.Response, error) {
+	req := c.API.MessageAPI.SearchMessages(ctx).
+		Limit(q.Limit).
+		Offset(q.Offset).
+		Sort(q.Sort)
+	if q.Word != "" {
+		req = req.Word(q.Word)
+	}
+	if q.After != nil {
+		req = req.After(*q.After)
+	}
+	if q.Before != nil {
+		req = req.Before(*q.Before)
+	}
+	if q.InSet {
+		req = req.In(q.In)
+	}
+	if q.ToSet {
+		req = req.To(q.To)
+	}
+	if q.FromSet {
+		req = req.From(q.From)
+	}
+	if q.CitationSet {
+		req = req.Citation(q.Citation)
+	}
+	if q.Bot != nil {
+		req = req.Bot(*q.Bot)
+	}
+	if q.HasURL != nil {
+		req = req.HasURL(*q.HasURL)
+	}
+	if q.HasAttachments != nil {
+		req = req.HasAttachments(*q.HasAttachments)
+	}
+	if q.HasImage != nil {
+		req = req.HasImage(*q.HasImage)
+	}
+	if q.HasVideo != nil {
+		req = req.HasVideo(*q.HasVideo)
+	}
+	if q.HasAudio != nil {
+		req = req.HasAudio(*q.HasAudio)
+	}
+	return req.Execute()
+}
+
 func (c *Client) GetUsers(ctx context.Context) ([]traq.User, *http.Response, error) {
 	return c.API.UserAPI.GetUsers(ctx).Execute()
 }

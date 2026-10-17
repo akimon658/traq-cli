@@ -4,6 +4,7 @@ services:
     environment:
       TRAQ_ALLOWSIGNUP: "true"
       TRAQ_MARIADB_HOST: mariadb
+      TRAQ_ES_URL: http://es:9200
       TRAQ_STORAGE_LOCAL_DIR: /app/storage
       # OAuth トークンの refresh を有効にし、統合テストで refresh フローを検証できるようにする
       TRAQ_OAUTH2_ISREFRESHENABLED: "true"
@@ -18,6 +19,31 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      es:
+        condition: service_healthy
+
+  es:
+    image: ghcr.io/traptitech/es-with-sudachi:8.8.1-3.1.0@sha256:01bbe21708d961195a0f6346bedac2aba1438c829b336f1d100a1d28610c1c26
+    environment:
+      - discovery.type=single-node
+      - xpack.security.http.ssl.enabled=false
+      - ELASTIC_PASSWORD=password
+    expose:
+      - 9200
+    volumes:
+      - type: volume
+        source: es
+        target: /usr/share/elasticsearch/data
+      - type: bind
+        source: ./dev/es_jvm.options
+        target: /usr/share/elasticsearch/config/jvm.options.d/es_jvm.options
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 30s
 
   mariadb:
     image: mariadb:10.11.19@sha256:7db29378d4fdab73f8123bbc2b48905c90d1a4b00cf848b028f1e81e623257f2
@@ -41,3 +67,4 @@ services:
 volumes:
   mariadb_data:
   traq_storage:
+  es:

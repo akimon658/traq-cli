@@ -52,11 +52,12 @@ func TestMain(m *testing.M) {
 	if err := stack.
 		WithEnv(map[string]string{"TRAQ_SERVER_PORT": "0"}).
 		WaitForService("mariadb", wait.ForHealthCheck().WithStartupTimeout(time.Minute)).
+		WaitForService("es", wait.ForHealthCheck().WithStartupTimeout(3*time.Minute)).
 		WaitForService(
 			"traq_server",
-			wait.ForHTTP("/api/v3/version").WithPort("3000/tcp").WithStartupTimeout(2*time.Minute),
+			wait.ForHTTP("/api/v3/version").WithPort("3000/tcp").WithStartupTimeout(3*time.Minute),
 		).
-		Up(ctx, compose.Wait(true), compose.RunServices("mariadb", "traq_server")); err != nil {
+		Up(ctx, compose.Wait(true), compose.RunServices("mariadb", "es", "traq_server")); err != nil {
 		panic(fmt.Sprintf("failed to start compose stack: %v", err))
 	}
 
