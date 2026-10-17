@@ -1,9 +1,11 @@
 package cli
 
 import (
-	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/akimon658/traq-cli/internal/auth"
 )
@@ -44,18 +46,10 @@ func TestResolveTokenPrefersEnvironment(t *testing.T) {
 	fs := &fakeStore{}
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: fs}
 	rt, err := e.resolveToken()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rt.Source != "environment" {
-		t.Errorf("source = %q, want %q", rt.Source, "environment")
-	}
-	if rt.Token.AccessToken != "env-token" {
-		t.Errorf("accessToken = %q, want %q", rt.Token.AccessToken, "env-token")
-	}
-	if fs.loads != 0 {
-		t.Errorf("store.Load called %d times, want 0", fs.loads)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "environment", rt.Source)
+	assert.Equal(t, "env-token", rt.Token.AccessToken)
+	assert.Zero(t, fs.loads, "store.Load called %d times, want 0", fs.loads)
 }
 
 func TestResolveTokenPrefersFlag(t *testing.T) {
@@ -66,15 +60,9 @@ func TestResolveTokenPrefersFlag(t *testing.T) {
 
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: &fakeStore{}}
 	rt, err := e.resolveToken()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rt.Source != "flag" {
-		t.Errorf("source = %q, want %q", rt.Source, "flag")
-	}
-	if rt.Token.AccessToken != "flag-token" {
-		t.Errorf("accessToken = %q, want %q", rt.Token.AccessToken, "flag-token")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "flag", rt.Source)
+	assert.Equal(t, "flag-token", rt.Token.AccessToken)
 }
 
 func TestResolveTokenFromStore(t *testing.T) {
@@ -91,18 +79,10 @@ func TestResolveTokenFromStore(t *testing.T) {
 	}
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: fs}
 	rt, err := e.resolveToken()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rt.Source != "keychain" {
-		t.Errorf("source = %q, want %q", rt.Source, "keychain")
-	}
-	if rt.Token.AccessToken != "stored-token" {
-		t.Errorf("accessToken = %q, want %q", rt.Token.AccessToken, "stored-token")
-	}
-	if fs.loads != 1 {
-		t.Errorf("store.Load called %d times, want 1", fs.loads)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "keychain", rt.Source)
+	assert.Equal(t, "stored-token", rt.Token.AccessToken)
+	assert.Equal(t, 1, fs.loads, "store.Load called %d times, want 1", fs.loads)
 }
 
 func TestResolveTokenNotAuthenticated(t *testing.T) {
@@ -110,12 +90,8 @@ func TestResolveTokenNotAuthenticated(t *testing.T) {
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: fs}
 	_, err := e.resolveToken()
 	var ec *ExitCodeError
-	if !errors.As(err, &ec) {
-		t.Fatalf("err = %v, want ExitCodeError", err)
-	}
-	if ec.Code != exitAuthRequired {
-		t.Errorf("code = %d, want %d", ec.Code, exitAuthRequired)
-	}
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, exitAuthRequired, ec.Code)
 }
 
 func TestResolveTokenExpiredWithoutRefreshToken(t *testing.T) {
@@ -131,13 +107,7 @@ func TestResolveTokenExpiredWithoutRefreshToken(t *testing.T) {
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: fs}
 	_, err := e.resolveToken()
 	var ec *ExitCodeError
-	if !errors.As(err, &ec) {
-		t.Fatalf("err = %v, want ExitCodeError", err)
-	}
-	if ec.Code != exitAuthRequired {
-		t.Errorf("code = %d, want %d", ec.Code, exitAuthRequired)
-	}
-	if fs.deletes != 0 {
-		t.Errorf("store.Delete called %d times, want 0", fs.deletes)
-	}
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, exitAuthRequired, ec.Code)
+	assert.Zero(t, fs.deletes, "store.Delete called %d times, want 0", fs.deletes)
 }

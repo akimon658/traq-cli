@@ -1,9 +1,10 @@
 package auth
 
 import (
-	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseScopes(t *testing.T) {
@@ -20,10 +21,7 @@ func TestParseScopes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseScopes(tt.in)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ParseScopes(%q) = %v, want %v", tt.in, got, tt.want)
-			}
+			assert.Equal(t, tt.want, ParseScopes(tt.in))
 		})
 	}
 }
@@ -44,13 +42,12 @@ func TestNormalizeScopes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := NormalizeScopes(tt.in)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NormalizeScopes(%v) error = %v, wantErr %v", tt.in, err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
 				return
 			}
-			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NormalizeScopes(%v) = %v, want %v", tt.in, got, tt.want)
-			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -89,30 +86,23 @@ func TestLacksScope(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.token.LacksScope(tt.scope); got != tt.want {
-				t.Errorf("LacksScope(%q) = %v, want %v", tt.scope, got, tt.want)
-			}
+			assert.Equal(t, tt.want, tt.token.LacksScope(tt.scope))
 		})
 	}
 }
 
 func TestTokenExpired(t *testing.T) {
-	if (&Token{ExpiresAt: time.Now().Add(-time.Hour)}).Expired() != true {
-		t.Error("expired token should be expired")
-	}
-	if (&Token{ExpiresAt: time.Now().Add(time.Hour)}).Expired() != false {
-		t.Error("unexpired token should not be expired")
-	}
-	if (&Token{}).Expired() != false {
-		t.Error("token without expiry should not be expired")
-	}
+	assert.True(t, (&Token{ExpiresAt: time.Now().Add(-time.Hour)}).Expired(),
+		"expired token should be expired")
+	assert.False(t, (&Token{ExpiresAt: time.Now().Add(time.Hour)}).Expired(),
+		"unexpired token should not be expired")
+	assert.False(t, (&Token{}).Expired(),
+		"token without expiry should not be expired")
 }
 
 func TestContainsScope(t *testing.T) {
-	if !ContainsScope([]string{"read", "write"}, ScopeWrite) {
-		t.Error("should contain write")
-	}
-	if ContainsScope([]string{"read"}, ScopeWrite) {
-		t.Error("should not contain write")
-	}
+	assert.True(t, ContainsScope([]string{"read", "write"}, ScopeWrite),
+		"should contain write")
+	assert.False(t, ContainsScope([]string{"read"}, ScopeWrite),
+		"should not contain write")
 }

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/compose"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -180,9 +182,7 @@ func runCLI(t *testing.T, args ...string) (string, error) {
 func captureStdout(t *testing.T, fn func() error) (string, error) {
 	t.Helper()
 	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	stdout := os.Stdout
 	os.Stdout = w
 	done := make(chan struct{})
@@ -193,22 +193,16 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 	}()
 	execErr := fn()
 	os.Stdout = stdout
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, w.Close())
 	<-done
-	if err := r.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, r.Close())
 	return buf.String(), execErr
 }
 
 func apiGetJSON(t *testing.T, path string) map[string]any {
 	t.Helper()
 	apiMe, err := jsonGet(t, testTraqOrigin+"/api/v3"+path)
-	if err != nil {
-		t.Fatalf("failed to GET %s: %v", path, err)
-	}
+	require.NoError(t, err, "failed to GET %s", path)
 	return apiMe
 }
 
@@ -244,20 +238,12 @@ func TestUsersMe(t *testing.T) {
 	t.Setenv("TRAQ_ACCESS_TOKEN", testTraqToken)
 
 	out, err := runCLI(t, "users", "me")
-	if err != nil {
-		t.Fatalf("users me failed: %v", err)
-	}
+	require.NoError(t, err, "users me failed")
 	var me map[string]any
-	if err := json.Unmarshal([]byte(out), &me); err != nil {
-		t.Fatalf("output is not JSON: %v: %s", err, out)
-	}
+	require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)
 	apiMe := apiGetJSON(t, "/users/me")
-	if me["id"] != apiMe["id"] {
-		t.Errorf("id = %v, want %v", me["id"], apiMe["id"])
-	}
-	if got := strings.ToLower(asString(me["name"])); !strings.Contains(got, testBotName) {
-		t.Errorf("name = %q, want to contain %q", me["name"], testBotName)
-	}
+	assert.Equal(t, apiMe["id"], me["id"])
+	assert.Contains(t, strings.ToLower(asString(me["name"])), testBotName)
 }
 
 func TestUsersMeInvalidToken(t *testing.T) {
@@ -266,19 +252,11 @@ func TestUsersMeInvalidToken(t *testing.T) {
 	t.Setenv("TRAQ_ACCESS_TOKEN", "invalid")
 
 	_, err := runCLI(t, "users", "me")
-	if err == nil {
-		t.Fatal("expected an error for the invalid token, got nil")
-	}
+	require.Error(t, err, "expected an error for the invalid token")
 	var ec *ExitCodeError
-	if !errors.As(err, &ec) {
-		t.Fatalf("err = %v, want ExitCodeError", err)
-	}
-	if ec.Code != exitAuthRequired {
-		t.Errorf("code = %d, want %d", ec.Code, exitAuthRequired)
-	}
-	if !strings.Contains(err.Error(), "the token was rejected") {
-		t.Errorf("err = %v, want to contain 'the token was rejected'", err)
-	}
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, exitAuthRequired, ec.Code)
+	assert.Contains(t, err.Error(), "the token was rejected")
 }
 
 func TestMessageSend(t *testing.T) {
@@ -292,16 +270,12 @@ func TestMessageSend(t *testing.T) {
 	)
 
 	out, err := runCLI(t, "message", "send", "#general", contentByPath)
-	if err != nil {
-		t.Fatalf("message send failed: %v", err)
-	}
+	require.NoError(t, err, "message send failed")
 	assertPosted(t, out, contentByPath)
 
 	channelID := testGeneralChannelID(t)
 	out, err = runCLI(t, "message", "send", channelID, contentByUUID)
-	if err != nil {
-		t.Fatalf("message send failed: %v", err)
-	}
+	require.NoError(t, err, "message send failed")
 	assertPosted(t, out, contentByUUID)
 }
 
@@ -311,44 +285,28 @@ func TestMessageSendChannelNotFound(t *testing.T) {
 	t.Setenv("TRAQ_ACCESS_TOKEN", testTraqToken)
 
 	out, err := runCLI(t, "message", "send", "#does-not-exist", "hello")
-	if err == nil {
-		t.Fatalf("expected an error for the nonexistent channel, got nil: %s", out)
-	}
+	require.Error(t, err, "expected an error for the nonexistent channel, output: %s", out)
 	var ec *ExitCodeError
-	if !errors.As(err, &ec) {
-		t.Fatalf("err = %v, want ExitCodeError", err)
-	}
-	if ec.Code != exitGeneral {
-		t.Errorf("code = %d, want %d", ec.Code, exitGeneral)
-	}
-	if !strings.Contains(err.Error(), "channel not found") {
-		t.Errorf("err = %v, want to contain 'channel not found'", err)
-	}
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, exitGeneral, ec.Code)
+	assert.Contains(t, err.Error(), "channel not found")
 }
 
 func assertPosted(t *testing.T, out, wantContent string) {
 	t.Helper()
 	var msg map[string]any
-	if err := json.Unmarshal([]byte(out), &msg); err != nil {
-		t.Fatalf("output is not JSON: %v: %s", err, out)
-	}
+	require.NoError(t, json.Unmarshal([]byte(out), &msg), "output is not JSON: %s", out)
 	id, ok := msg["id"].(string)
-	if !ok || id == "" {
-		t.Fatalf("no message id in the output: %s", out)
-	}
+	require.True(t, ok && id != "", "no message id in the output: %s", out)
 	got := apiGetJSON(t, "/messages/"+id)
-	if asString(got["content"]) != wantContent {
-		t.Errorf("content = %q, want %q", got["content"], wantContent)
-	}
+	assert.Equal(t, wantContent, asString(got["content"]))
 }
 
 func testGeneralChannelID(t *testing.T) string {
 	t.Helper()
 	list := apiGetJSON(t, "/channels")
 	pub, ok := list["public"].([]any)
-	if !ok {
-		t.Fatalf("unexpected channels response: %v", list)
-	}
+	require.True(t, ok, "unexpected channels response: %v", list)
 	for _, ch := range pub {
 		m, ok := ch.(map[string]any)
 		if !ok {
@@ -359,7 +317,7 @@ func testGeneralChannelID(t *testing.T) string {
 			return id
 		}
 	}
-	t.Fatalf("channel general not found in the response: %v", list)
+	require.Fail(t, "channel general not found in the response", "%v", list)
 	return ""
 }
 
@@ -369,23 +327,18 @@ func TestAuthStatus(t *testing.T) {
 	t.Setenv("TRAQ_ACCESS_TOKEN", testTraqToken)
 
 	out, err := runCLI(t, "auth", "status")
-	if err != nil {
-		t.Fatalf("auth status failed: %v", err)
-	}
+	require.NoError(t, err, "auth status failed")
 	var status map[string]any
-	if err := json.Unmarshal([]byte(out), &status); err != nil {
-		t.Fatalf("output is not JSON: %v: %s", err, out)
-	}
+	require.NoError(t, json.Unmarshal([]byte(out), &status), "output is not JSON: %s", out)
+	me := apiGetJSON(t, "/users/me")
 	for key, want := range map[string]any{
 		"origin": testTraqOrigin,
 		"source": "environment",
 		"method": "bot",
-		"userId": asString(apiGetJSON(t, "/users/me")["id"]),
-		"user":   "@" + asString(apiGetJSON(t, "/users/me")["name"]),
+		"userId": asString(me["id"]),
+		"user":   "@" + asString(me["name"]),
 	} {
-		if got := status[key]; got != want {
-			t.Errorf("status[%q] = %v, want %v", key, got, want)
-		}
+		assert.Equal(t, want, status[key], "status[%q]", key)
 	}
 }
 
@@ -395,50 +348,26 @@ func TestAuthLoginTokenAndLogout(t *testing.T) {
 	overrideEnv(t, fs)
 
 	out, err := runCLI(t, "auth", "login", "--token", testTraqToken)
-	if err != nil {
-		t.Fatalf("auth login failed: %v", err)
-	}
-	if !strings.Contains(out, "signed in: @") {
-		t.Errorf("out = %q, want to contain 'signed in: @'", out)
-	}
-	if fs.saves != 1 {
-		t.Errorf("store.Save called %d times, want 1", fs.saves)
-	}
+	require.NoError(t, err, "auth login failed")
+	assert.Contains(t, out, "signed in: @")
+	assert.Equal(t, 1, fs.saves, "store.Save called %d times, want 1", fs.saves)
 	tok := fs.token
-	if tok.AccessToken != testTraqToken {
-		t.Errorf("accessToken = %q, want %q", tok.AccessToken, testTraqToken)
-	}
-	if tok.Method != auth.MethodBot {
-		t.Errorf("method = %q, want %q", tok.Method, auth.MethodBot)
-	}
-	if tok.UserName == "" {
-		t.Error("userName is empty")
-	}
-	if tok.Origin != testTraqOrigin {
-		t.Errorf("origin = %q, want %q", tok.Origin, testTraqOrigin)
-	}
+	assert.Equal(t, testTraqToken, tok.AccessToken)
+	assert.Equal(t, auth.MethodBot, tok.Method)
+	assert.NotEmpty(t, tok.UserName, "userName is empty")
+	assert.Equal(t, testTraqOrigin, tok.Origin)
 
 	fs.found = true
 
 	out, err = runCLI(t, "auth", "logout")
-	if err != nil {
-		t.Fatalf("auth logout failed: %v", err)
-	}
-	if !strings.Contains(out, "logged out") {
-		t.Errorf("out = %q, want to contain 'logged out'", out)
-	}
-	if fs.deletes != 1 {
-		t.Errorf("store.Delete called %d times, want 1", fs.deletes)
-	}
+	require.NoError(t, err, "auth logout failed")
+	assert.Contains(t, out, "logged out")
+	assert.Equal(t, 1, fs.deletes, "store.Delete called %d times, want 1", fs.deletes)
 
 	_, err = runCLI(t, "auth", "logout")
 	var ec *ExitCodeError
-	if !errors.As(err, &ec) {
-		t.Fatalf("err = %v, want ExitCodeError", err)
-	}
-	if ec.Code != exitAuthRequired {
-		t.Errorf("code = %d, want %d", ec.Code, exitAuthRequired)
-	}
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, exitAuthRequired, ec.Code)
 }
 
 func TestAuthLoginInvalidToken(t *testing.T) {
@@ -447,22 +376,12 @@ func TestAuthLoginInvalidToken(t *testing.T) {
 	overrideEnv(t, fs)
 
 	_, err := runCLI(t, "auth", "login", "--token", "invalid")
-	if err == nil {
-		t.Fatal("expected an error for the invalid token, got nil")
-	}
+	require.Error(t, err, "expected an error for the invalid token")
 	var ec *ExitCodeError
-	if !errors.As(err, &ec) {
-		t.Fatalf("err = %v, want ExitCodeError", err)
-	}
-	if ec.Code != exitGeneral {
-		t.Errorf("code = %d, want %d", ec.Code, exitGeneral)
-	}
-	if !strings.Contains(err.Error(), "the token was rejected") {
-		t.Errorf("err = %v, want to contain 'the token was rejected'", err)
-	}
-	if fs.saves != 0 {
-		t.Errorf("store.Save called %d times, want 0", fs.saves)
-	}
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, exitGeneral, ec.Code)
+	assert.Contains(t, err.Error(), "the token was rejected")
+	assert.Zero(t, fs.saves, "store.Save called %d times, want 0", fs.saves)
 }
 
 func overrideEnv(t *testing.T, fs *fakeStore) {

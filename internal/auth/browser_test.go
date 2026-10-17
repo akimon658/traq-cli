@@ -5,31 +5,25 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewPKCE(t *testing.T) {
 	pk, err := NewPKCE()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pk.Verifier) != 64 {
-		t.Errorf("verifier length = %d, want 64", len(pk.Verifier))
-	}
+	require.NoError(t, err)
+	assert.Len(t, pk.Verifier, 64)
 	for _, r := range pk.Verifier {
-		if !strings.ContainsRune(pkceAlphabet, r) {
-			t.Errorf("verifier has invalid character %q", string(r))
-		}
+		assert.True(t, strings.ContainsRune(pkceAlphabet, r),
+			"verifier has invalid character %q", string(r))
 	}
-	if len(pk.Challenge) == 0 {
-		t.Error("challenge is empty")
-	}
-	if len(pk.State) == 0 {
-		t.Error("state is empty")
-	}
-	other, _ := NewPKCE()
-	if pk.Verifier == other.Verifier || pk.State == other.State {
-		t.Error("PKCE values should be random")
-	}
+	assert.NotEmpty(t, pk.Challenge, "challenge is empty")
+	assert.NotEmpty(t, pk.State, "state is empty")
+	other, err := NewPKCE()
+	require.NoError(t, err)
+	assert.NotEqual(t, pk.Verifier, other.Verifier, "PKCE values should be random")
+	assert.NotEqual(t, pk.State, other.State, "PKCE values should be random")
 }
 
 func TestAuthorizeURL(t *testing.T) {
@@ -55,76 +49,49 @@ func TestAuthorizeURL(t *testing.T) {
 		"code_challenge=challenge123",
 		"code_challenge_method=S256",
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("AuthorizeURL = %q, want to contain %q", got, want)
-		}
+		assert.Contains(t, got, want)
 	}
 }
 
 func TestCallbackServer(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		pk, err := NewPKCE()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		cb, err := ListenCallback(pk.State)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		defer cb.Close()
 		redirectURI := cb.RedirectURI()
-		if !strings.HasPrefix(redirectURI, "http://127.0.0.1:") {
-			t.Errorf("redirect URI = %q", redirectURI)
-		}
-		if _, err := httpGet(redirectURI + "?code=xyz&state=" + pk.State); err != nil {
-			t.Fatal(err)
-		}
+		assert.True(t, strings.HasPrefix(redirectURI, "http://127.0.0.1:"),
+			"redirect URI = %q", redirectURI)
+		_, err = httpGet(redirectURI + "?code=xyz&state=" + pk.State)
+		require.NoError(t, err)
 		code, err := cb.Wait(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if code != "xyz" {
-			t.Errorf("code = %q, want xyz", code)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "xyz", code)
 	})
 
 	t.Run("state mismatch", func(t *testing.T) {
 		pk, err := NewPKCE()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		cb, err := ListenCallback(pk.State)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		defer cb.Close()
-		if _, err := httpGet(cb.RedirectURI() + "?code=xyz&state=wrong"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := cb.Wait(t.Context()); err == nil {
-			t.Error("state mismatch should be an error")
-		}
+		_, err = httpGet(cb.RedirectURI() + "?code=xyz&state=wrong")
+		require.NoError(t, err)
+		_, err = cb.Wait(t.Context())
+		assert.Error(t, err, "state mismatch should be an error")
 	})
 
 	t.Run("error parameter", func(t *testing.T) {
 		pk, err := NewPKCE()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		cb, err := ListenCallback(pk.State)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		defer cb.Close()
-		if _, err := httpGet(
-			cb.RedirectURI() + "?error=access_denied&state=" + pk.State,
-		); err != nil {
-			t.Fatal(err)
-		}
+		_, err = httpGet(cb.RedirectURI() + "?error=access_denied&state=" + pk.State)
+		require.NoError(t, err)
 		_, err = cb.Wait(t.Context())
-		if err == nil {
-			t.Error("error parameter should be an error")
-		}
+		assert.Error(t, err, "error parameter should be an error")
 	})
 }
 

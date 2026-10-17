@@ -1,14 +1,14 @@
 package auth
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/99designs/keyring"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeKeyring struct {
@@ -84,29 +84,18 @@ func assertRoundTrip(t *testing.T, s defaultStore, wantSource string, verify fun
 	t.Helper()
 	orig := testToken()
 	venue, err := s.Save(orig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if venue != wantSource {
-		t.Errorf("venue = %q, want %q", venue, wantSource)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, wantSource, venue)
 
 	t.Cleanup(func() {
-		if _, err := s.Delete(); err != nil {
-			t.Errorf("failed to clean up: %v", err)
-		}
+		_, err := s.Delete()
+		assert.NoError(t, err, "failed to clean up")
 	})
 
 	loaded, source, found, err := s.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("token not found after save")
-	}
-	if source != wantSource {
-		t.Errorf("source = %q, want %q", source, wantSource)
-	}
+	require.NoError(t, err)
+	require.True(t, found, "token not found after save")
+	assert.Equal(t, wantSource, source)
 	checks := []struct {
 		name string
 		got  any
@@ -121,119 +110,75 @@ func assertRoundTrip(t *testing.T, s defaultStore, wantSource string, verify fun
 		{"userBot", loaded.UserBot, orig.UserBot},
 	}
 	for _, c := range checks {
-		if c.got != c.want {
-			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
-		}
+		assert.Equal(t, c.want, c.got, c.name)
 	}
-	if !reflect.DeepEqual(loaded.Scope, orig.Scope) {
-		t.Errorf("scope = %v, want %v", loaded.Scope, orig.Scope)
-	}
-	if !loaded.ExpiresAt.Equal(orig.ExpiresAt) {
-		t.Errorf("expiresAt = %v, want %v", loaded.ExpiresAt, orig.ExpiresAt)
-	}
+	assert.Equal(t, orig.Scope, loaded.Scope)
+	assert.True(t, loaded.ExpiresAt.Equal(orig.ExpiresAt),
+		"expiresAt = %v, want %v", loaded.ExpiresAt, orig.ExpiresAt)
 
-	if _, err := s.Save(orig); err != nil {
-		t.Fatal(err)
-	}
+	_, err = s.Save(orig)
+	require.NoError(t, err)
 	loaded2, _, found, err := s.Load()
-	if err != nil || !found {
-		t.Fatalf("reload failed: found = %v, err = %v", found, err)
-	}
-	if loaded2.AccessToken != orig.AccessToken {
-		t.Errorf("reloaded accessToken = %q, want %q", loaded2.AccessToken, orig.AccessToken)
-	}
+	require.NoError(t, err)
+	require.True(t, found, "reload failed")
+	assert.Equal(t, orig.AccessToken, loaded2.AccessToken)
 
 	if verify != nil {
 		verify(t)
 	}
 
 	foundAfterDelete, err := s.Delete()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !foundAfterDelete {
-		t.Error("Delete should report the item was found")
-	}
-	if _, _, found, _ := s.Load(); found {
-		t.Error("token should be gone after delete")
-	}
+	require.NoError(t, err)
+	assert.True(t, foundAfterDelete, "Delete should report the item was found")
+	_, _, found, _ = s.Load()
+	assert.False(t, found, "token should be gone after delete")
 }
 
 func TestDefaultStoreRoundTripViaKeyring(t *testing.T) {
 	kr := newFakeKeyring()
 	s := testStore(t, kr, nil)
 	path, err := s.filePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), credentialsDirPerm); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("stale"), credentialsFilePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), credentialsDirPerm))
+	require.NoError(t, os.WriteFile(path, []byte("stale"), credentialsFilePerm))
 	assertRoundTrip(t, s, storeSourceKeychain, nil)
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("stale credentials file should be removed after keyring save, got err = %v", err)
-	}
+	_, err = os.Stat(path)
+	assert.ErrorIs(t, err, os.ErrNotExist,
+		"stale credentials file should be removed after keyring save")
 }
 
 func TestDefaultStoreFileFallback(t *testing.T) {
 	s := testStore(t, nil, keyring.ErrNoAvailImpl)
 	assertRoundTrip(t, s, storeSourceFile, func(t *testing.T) {
 		path, err := s.filePath()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if perm := info.Mode().Perm(); perm != credentialsFilePerm {
-			t.Errorf("credentials file permission = %o, want %o", perm, credentialsFilePerm)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(credentialsFilePerm), info.Mode().Perm(),
+			"credentials file permission")
 		dirInfo, err := os.Stat(filepath.Dir(path))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if perm := dirInfo.Mode().Perm(); perm != credentialsDirPerm {
-			t.Errorf("credentials dir permission = %o, want %o", perm, credentialsDirPerm)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(credentialsDirPerm), dirInfo.Mode().Perm(),
+			"credentials dir permission")
 	})
 }
 
 func TestDefaultStoreNotFound(t *testing.T) {
 	s := testStore(t, newFakeKeyring(), nil)
 	_, _, found, err := s.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if found {
-		t.Error("found = true, want false when nothing is stored")
-	}
+	require.NoError(t, err)
+	assert.False(t, found, "found = true, want false when nothing is stored")
 	foundAfterDelete, err := s.Delete()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if foundAfterDelete {
-		t.Error("Delete should report not found when nothing is stored")
-	}
+	require.NoError(t, err)
+	assert.False(t, foundAfterDelete, "Delete should report not found when nothing is stored")
 }
 
 func TestDefaultStoreBrokenCredentials(t *testing.T) {
 	s := testStore(t, nil, keyring.ErrNoAvailImpl)
 	path, err := s.filePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), credentialsDirPerm); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(`{"accessToken":""}`), credentialsFilePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), credentialsDirPerm))
+	require.NoError(t, os.WriteFile(path, []byte(`{"accessToken":""}`), credentialsFilePerm))
 	_, _, _, err = s.Load()
-	if err == nil {
-		t.Error("Load should fail on broken credentials")
-	}
+	assert.Error(t, err, "Load should fail on broken credentials")
 }
