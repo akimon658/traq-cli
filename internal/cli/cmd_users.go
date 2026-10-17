@@ -26,9 +26,9 @@ var usersMeCmd = &cobra.Command{
 		}
 		return nil
 	},
-	RunE: func(_ *cobra.Command, _ []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		e := newEnv()
-		rt, err := e.resolveToken()
+		rt, err := e.resolveToken(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -38,7 +38,7 @@ var usersMeCmd = &cobra.Command{
 		c := client.New(e.Origin)
 		var me *traq.MyUserDetail
 		err = e.apiExec(
-			context.Background(),
+			cmd.Context(),
 			&rt,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response

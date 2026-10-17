@@ -61,16 +61,15 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 	scopeFlag, _ := cmd.Flags().GetString("scope")
 
 	if rootCmd.PersistentFlags().Changed("token") {
-		return loginWithToken(e, flagToken)
+		return loginWithToken(cmd.Context(), e, flagToken)
 	}
 	if !browser {
 		return &ExitCodeError{exitUsage, errors.New("specify either --browser or --token <TOKEN>")}
 	}
-	return login(e, scopeFlag, openBrowser)
+	return login(cmd.Context(), e, scopeFlag, openBrowser)
 }
 
-func loginWithToken(e *Env, value string) error {
-	ctx := context.Background()
+func loginWithToken(ctx context.Context, e *Env, value string) error {
 	c := client.New(e.Origin)
 	me, resp, err := c.GetMe(ctx, value)
 	if err != nil {
@@ -112,8 +111,8 @@ func loginWithToken(e *Env, value string) error {
 // loginTimeout はブラウザログイン全体のタイムアウト。テストから短縮できるよう変数にしている。
 var loginTimeout = auth.LoginTimeout
 
-func login(e *Env, scopeFlag string, openBrowser func(url string)) error {
-	ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
+func login(ctx context.Context, e *Env, scopeFlag string, openBrowser func(url string)) error {
+	ctx, cancel := context.WithTimeout(ctx, loginTimeout)
 	defer cancel()
 
 	scopes, err := auth.NormalizeScopes(auth.ParseScopes(scopeFlag))
@@ -185,7 +184,7 @@ func login(e *Env, scopeFlag string, openBrowser func(url string)) error {
 	return nil
 }
 
-func runLogout(_ *cobra.Command, _ []string) error {
+func runLogout(cmd *cobra.Command, _ []string) error {
 	e := newEnv()
 	stored, _, found, err := e.store().Load()
 	if err != nil {
@@ -199,7 +198,7 @@ func runLogout(_ *cobra.Command, _ []string) error {
 	}
 	origin := e.OriginOf(&stored)
 	if stored.Method == auth.MethodOAuth {
-		if rerr := auth.Revoke(context.Background(), origin, stored.AccessToken); rerr != nil {
+		if rerr := auth.Revoke(cmd.Context(), origin, stored.AccessToken); rerr != nil {
 			fmt.Fprintln(os.Stderr, "failed to revoke the token on the server:", rerr)
 		}
 	}
@@ -210,9 +209,9 @@ func runLogout(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func runStatus(_ *cobra.Command, _ []string) error {
+func runStatus(cmd *cobra.Command, _ []string) error {
 	e := newEnv()
-	rt, err := e.resolveToken()
+	rt, err := e.resolveToken(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -222,7 +221,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	var meErr error
 	c := client.New(e.Origin)
-	me, meResp, err := c.GetMe(context.Background(), rt.Token.AccessToken)
+	me, meResp, err := c.GetMe(cmd.Context(), rt.Token.AccessToken)
 	if err != nil {
 		meErr = client.WrapError(err, meResp)
 	} else {

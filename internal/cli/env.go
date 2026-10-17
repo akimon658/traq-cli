@@ -48,7 +48,7 @@ type ResolvedToken struct {
 	Source string
 }
 
-func (e *Env) resolveToken() (ResolvedToken, error) {
+func (e *Env) resolveToken(ctx context.Context) (ResolvedToken, error) {
 	t := firstNonEmpty(flagToken, os.Getenv("TRAQ_ACCESS_TOKEN"))
 	if t != "" {
 		source := "environment"
@@ -77,7 +77,7 @@ func (e *Env) resolveToken() (ResolvedToken, error) {
 				errors.New("the stored token has expired: run 'traq auth login'"),
 			}
 		}
-		nt, rerr := auth.Refresh(context.Background(), e.OriginOf(&stored), e.ClientID, stored)
+		nt, rerr := auth.Refresh(ctx, e.OriginOf(&stored), e.ClientID, stored)
 		if rerr != nil {
 			_, _ = e.store().Delete()
 			return ResolvedToken{}, &ExitCodeError{

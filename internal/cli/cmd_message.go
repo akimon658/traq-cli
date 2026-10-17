@@ -33,9 +33,9 @@ var sendMessageCmd = &cobra.Command{
 		}
 		return nil
 	},
-	RunE: func(_ *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		e := newEnv()
-		rt, err := e.resolveToken()
+		rt, err := e.resolveToken(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -43,7 +43,7 @@ var sendMessageCmd = &cobra.Command{
 			return err
 		}
 		c := client.New(e.Origin)
-		ctx := context.Background()
+		ctx := cmd.Context()
 		channelID, err := resolveChannel(e, &rt, c, ctx, args[0])
 		if err != nil {
 			return err

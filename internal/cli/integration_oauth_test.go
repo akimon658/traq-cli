@@ -196,6 +196,7 @@ func driveOAuthLogin(
 	var res loginResult
 	res.out, res.err = captureStdout(t, func() error {
 		res.err = login(
+			t.Context(),
 			&Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms},
 			scopeFlag,
 			browserSim(t, sess, submit, obs),

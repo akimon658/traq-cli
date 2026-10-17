@@ -15,7 +15,7 @@ func TestResolveTokenPrefersEnvironment(t *testing.T) {
 	t.Setenv("TRAQ_ACCESS_TOKEN", "env-token")
 	ms := auth.NewMockStore(gomock.NewController(t))
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: ms}
-	rt, err := e.resolveToken()
+	rt, err := e.resolveToken(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "environment", rt.Source)
 	assert.Equal(t, "env-token", rt.Token.AccessToken)
@@ -29,7 +29,7 @@ func TestResolveTokenPrefersFlag(t *testing.T) {
 
 	ms := auth.NewMockStore(gomock.NewController(t))
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: ms}
-	rt, err := e.resolveToken()
+	rt, err := e.resolveToken(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "flag", rt.Source)
 	assert.Equal(t, "flag-token", rt.Token.AccessToken)
@@ -45,7 +45,7 @@ func TestResolveTokenFromStore(t *testing.T) {
 		ExpiresAt:   time.Now().Add(24 * time.Hour),
 	}, "keychain", true, nil).Times(1)
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: ms}
-	rt, err := e.resolveToken()
+	rt, err := e.resolveToken(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "keychain", rt.Source)
 	assert.Equal(t, "stored-token", rt.Token.AccessToken)
@@ -55,7 +55,7 @@ func TestResolveTokenNotAuthenticated(t *testing.T) {
 	ms := auth.NewMockStore(gomock.NewController(t))
 	ms.EXPECT().Load().Return(auth.Token{}, "", false, nil).Times(1)
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: ms}
-	_, err := e.resolveToken()
+	_, err := e.resolveToken(t.Context())
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, exitAuthRequired, ec.Code)
@@ -69,7 +69,7 @@ func TestResolveTokenExpiredWithoutRefreshToken(t *testing.T) {
 		ExpiresAt:   time.Now().Add(-1 * time.Hour),
 	}, "keychain", true, nil).Times(1)
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: ms}
-	_, err := e.resolveToken()
+	_, err := e.resolveToken(t.Context())
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, exitAuthRequired, ec.Code)
