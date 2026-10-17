@@ -266,6 +266,41 @@ func runMessageSearch(
 		stampNames[s.Id] = s.Name
 	}
 
+	// 引用・添付の解決は表示の補助なので、取得に失敗しても本体の表示は続行する。
+	quoted := map[string]traq.Message{}
+	fileMetas := map[string]traq.FileInfo{}
+	if len(result.Hits) > 0 {
+		contents := make([]string, 0, len(result.Hits))
+		for _, m := range result.Hits {
+			contents = append(contents, m.Content)
+		}
+		quoteIDs, fileIDs := collectAllEmbedIDs(contents, e.Origin)
+		for _, id := range quoteIDs {
+			var qm *traq.Message
+			_ = e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
+				var resp *http.Response
+				var apiErr error
+				qm, resp, apiErr = c.GetMessage(ctx, id)
+				return resp, apiErr
+			})
+			if qm != nil {
+				quoted[id] = *qm
+			}
+		}
+		for _, id := range fileIDs {
+			var fi *traq.FileInfo
+			_ = e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
+				var resp *http.Response
+				var apiErr error
+				fi, resp, apiErr = c.GetFileMeta(ctx, id)
+				return resp, apiErr
+			})
+			if fi != nil {
+				fileMetas[id] = *fi
+			}
+		}
+	}
+
 	total := result.TotalHits
 	return writeMessageList(cmd.OutOrStdout(), messageList{
 		label:     searchLabel(word, opts.in),
@@ -277,6 +312,9 @@ func runMessageSearch(
 		loc:       time.Local,
 		totalHits: optional.Some(total),
 		sort:      opts.sort,
+		origin:    e.Origin,
+		quoted:    quoted,
+		files:     fileMetas,
 	})
 }
 

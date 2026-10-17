@@ -24,6 +24,12 @@ type messageList struct {
 	// totalHits が Some なら検索結果として表示する。
 	totalHits optional.Option[int64]
 	sort      string
+	// origin はメッセージ・ファイルURL埋め込み検出用の origin。
+	origin string
+	// quoted は引用メッセージIDから取得済みメッセージへのマップ。取得失敗分は欠番。
+	quoted map[string]traq.Message
+	// files はファイルIDから取得済みメタへのマップ。取得失敗分は欠番。
+	files map[string]traq.FileInfo
 }
 
 // writeMessageList はメッセージ一覧を可読性の高いテキストで出力する。
@@ -124,15 +130,73 @@ func formatMessage(m traq.Message, ml messageList) (string, error) {
 	}
 
 	lines := []string{header}
-	if m.Content != "" {
-		for _, line := range strings.Split(m.Content, "\n") {
-			lines = append(lines, "  "+line)
+	clean := cleanContent(m.Content, ml.origin)
+	if clean.body != "" {
+		for _, line := range strings.Split(clean.body, "\n") {
+			if line == "" {
+				lines = append(lines, "")
+			} else {
+				lines = append(lines, "  "+line)
+			}
 		}
 	}
-	if s := formatStamps(m.Stamps, ml.stamps); s != "" {
-		lines = append(lines, s)
+	for _, qid := range clean.quoteIDs {
+		lines = append(lines, formatQuote(qid, ml)...)
+	}
+	if len(clean.fileIDs) > 0 {
+		lines = append(lines, "添付ファイル")
+		for _, fid := range clean.fileIDs {
+			lines = append(lines, "  "+formatFile(fid, ml.files))
+		}
+	}
+	if items := formatStampItems(m.Stamps, ml.stamps); len(items) > 0 {
+		lines = append(lines, "スタンプ")
+		for _, it := range items {
+			lines = append(lines, "  "+it)
+		}
 	}
 	return strings.Join(lines, "\n"), nil
+}
+
+// formatQuote は引用1件分の行群を返す。取得失敗時はヘッダー1行のみ。
+func formatQuote(id string, ml messageList) []string {
+	qm, ok := ml.quoted[id]
+	if !ok {
+		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", id)}
+	}
+	user, uok := ml.users[qm.UserId]
+	label := "@unknown"
+	if uok {
+		label = userLabel(user)
+	}
+	header := fmt.Sprintf(
+		"引用 %s %s id:%s",
+		label,
+		qm.CreatedAt.In(ml.loc).Format(time.RFC3339),
+		qm.Id,
+	)
+	if !qm.UpdatedAt.Equal(qm.CreatedAt) {
+		header += " [edited]"
+	}
+	lines := []string{header}
+	if body := renderQuoteBody(qm.Content); body != "" {
+		for _, line := range strings.Split(body, "\n") {
+			if line == "" {
+				lines = append(lines, "")
+			} else {
+				lines = append(lines, "  "+line)
+			}
+		}
+	}
+	return lines
+}
+
+func formatFile(id string, files map[string]traq.FileInfo) string {
+	fi, ok := files[id]
+	if !ok {
+		return fmt.Sprintf("(取得失敗 id:%s)", id)
+	}
+	return fmt.Sprintf("%s (%s, %d bytes, id:%s)", fi.Name, fi.Mime, fi.Size, fi.Id)
 }
 
 func userLabel(u traq.User) string {
@@ -143,10 +207,10 @@ func userLabel(u traq.User) string {
 	return label
 }
 
-// formatStamps はスタンプを本文と区別できるようインデントせずに 1 行で返す。
-func formatStamps(stamps []traq.MessageStamp, names map[string]string) string {
+// formatStampItems はスタンプを名前順に ":name: ×count" の一覧で返す。
+func formatStampItems(stamps []traq.MessageStamp, names map[string]string) []string {
 	if len(stamps) == 0 {
-		return ""
+		return nil
 	}
 	parts := make([]string, 0, len(stamps))
 	for _, s := range stamps {
@@ -154,8 +218,8 @@ func formatStamps(stamps []traq.MessageStamp, names map[string]string) string {
 		if !ok {
 			name = s.StampId
 		}
-		parts = append(parts, fmt.Sprintf(":%s:%d", name, s.Count))
+		parts = append(parts, fmt.Sprintf(":%s: ×%d", name, s.Count))
 	}
 	sort.Strings(parts)
-	return strings.Join(parts, " ")
+	return parts
 }

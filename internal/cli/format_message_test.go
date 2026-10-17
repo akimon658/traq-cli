@@ -83,7 +83,9 @@ func TestWriteMessageListStamps(t *testing.T) {
 		"",
 		"2026-10-17T10:00:00Z @alice id:m1",
 		"  hello",
-		":ok:1 :thank:3",
+		"スタンプ",
+		"  :ok: ×1",
+		"  :thank: ×3",
 		"",
 	}, "\n")
 	assert.Equal(t, want, buf.String())

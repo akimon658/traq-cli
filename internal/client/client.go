@@ -174,3 +174,15 @@ func (c *Client) GetMyUnreadChannels(
 func (c *Client) GetStamps(ctx context.Context) ([]traq.StampWithThumbnail, *http.Response, error) {
 	return c.API.StampAPI.GetStamps(ctx).Execute()
 }
+
+func (c *Client) GetMessage(
+	ctx context.Context, messageID string,
+) (*traq.Message, *http.Response, error) {
+	return c.API.MessageAPI.GetMessage(ctx, messageID).Execute()
+}
+
+func (c *Client) GetFileMeta(
+	ctx context.Context, fileID string,
+) (*traq.FileInfo, *http.Response, error) {
+	return c.API.FileAPI.GetFileMeta(ctx, fileID).Execute()
+}

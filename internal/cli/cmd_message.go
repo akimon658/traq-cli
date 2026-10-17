@@ -225,6 +225,41 @@ func runMessageList(
 		}
 	}
 
+	// 引用・添付の解決は表示の補助なので、取得に失敗しても本体の表示は続行する。
+	quoted := map[string]traq.Message{}
+	fileMetas := map[string]traq.FileInfo{}
+	if len(msgs) > 0 {
+		contents := make([]string, 0, len(msgs))
+		for _, m := range msgs {
+			contents = append(contents, m.Content)
+		}
+		quoteIDs, fileIDs := collectAllEmbedIDs(contents, e.Origin)
+		for _, id := range quoteIDs {
+			var qm *traq.Message
+			_ = e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
+				var resp *http.Response
+				var apiErr error
+				qm, resp, apiErr = c.GetMessage(ctx, id)
+				return resp, apiErr
+			})
+			if qm != nil {
+				quoted[id] = *qm
+			}
+		}
+		for _, id := range fileIDs {
+			var fi *traq.FileInfo
+			_ = e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
+				var resp *http.Response
+				var apiErr error
+				fi, resp, apiErr = c.GetFileMeta(ctx, id)
+				return resp, apiErr
+			})
+			if fi != nil {
+				fileMetas[id] = *fi
+			}
+		}
+	}
+
 	var unread optional.Option[traq.UnreadChannel]
 	if opts.showUnread {
 		// 未読情報は表示の補助なので、取得に失敗しても本体の表示は続行する。
@@ -255,6 +290,9 @@ func runMessageList(
 		stamps: stampNames,
 		loc:    time.Local,
 		unread: unread,
+		origin: e.Origin,
+		quoted: quoted,
+		files:  fileMetas,
 	})
 }
 
