@@ -178,38 +178,21 @@ func createBotToken(traqOrigin string) (string, error) {
 	return created.Tokens.AccessToken, nil
 }
 
-func runCLI(t *testing.T, args ...string) (string, error) {
+func runCLI(t *testing.T, e *Env, args ...string) (string, error) {
 	t.Helper()
-	flagToken, flagOrigin, flagClientID = "", "", ""
-	// cobra はコマンド実行毎に Changed をリセットしないので、実行前に戻す
-	for _, name := range []string{"token", "origin", "client-id"} {
-		if f := rootCmd.PersistentFlags().Lookup(name); f != nil {
-			f.Changed = false
-		}
-	}
-	rootCmd.SetArgs(args)
-	out, execErr := captureStdout(t, rootCmd.Execute)
-	return strings.TrimRight(out, "\n"), execErr
+	cmd := newRootCmd(func() *Env { return e })
+	cmd.SetArgs(args)
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	execErr := cmd.Execute()
+	return strings.TrimRight(stdout.String(), "\n"), execErr
 }
 
-func captureStdout(t *testing.T, fn func() error) (string, error) {
+// botEnv は bot トークンを環境変数経由で渡すのと等価な Env を返す。
+func botEnv(t *testing.T, token string) *Env {
 	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	stdout := os.Stdout
-	os.Stdout = w
-	done := make(chan struct{})
-	var buf bytes.Buffer
-	go func() {
-		defer close(done)
-		_, _ = buf.ReadFrom(r)
-	}()
-	execErr := fn()
-	os.Stdout = stdout
-	require.NoError(t, w.Close())
-	<-done
-	require.NoError(t, r.Close())
-	return buf.String(), execErr
+	return &Env{Origin: testTraqOrigin, AccessToken: token}
 }
 
 func apiGetJSON(t *testing.T, path string) map[string]any {
@@ -245,15 +228,13 @@ func jsonGet(t *testing.T, u string) (map[string]any, error) {
 	return v, nil
 }
 
-func overrideEnv(t *testing.T, ms *auth.MockStore, clientIDs ...string) {
+func overrideEnv(t *testing.T, ms *auth.MockStore, clientIDs ...string) *Env {
 	t.Helper()
 	clientID := "test"
 	if len(clientIDs) > 0 && clientIDs[0] != "" {
 		clientID = clientIDs[0]
 	}
-	old := newEnv
-	newEnv = func() *Env { return &Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms} }
-	t.Cleanup(func() { newEnv = old })
+	return &Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms}
 }
 
 func requireTraqStack(t *testing.T) {

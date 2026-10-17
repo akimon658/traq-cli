@@ -2,11 +2,11 @@ package cli
 
 import (
 	"encoding/json"
-	"os"
+	"io"
 )
 
-func printJSON(v any) error {
-	enc := json.NewEncoder(os.Stdout)
+func printJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
 	return enc.Encode(v)

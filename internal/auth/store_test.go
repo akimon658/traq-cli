@@ -95,6 +95,7 @@ func assertRoundTrip(t *testing.T, s defaultStore, wantSource string, verify fun
 }
 
 func TestDefaultStoreRoundTripViaKeyring(t *testing.T) {
+	t.Parallel()
 	kr := NewMockKeyring(gomock.NewController(t))
 	var stored []byte
 	setItem := func(item keyring.Item) error {
@@ -134,6 +135,7 @@ func TestDefaultStoreRoundTripViaKeyring(t *testing.T) {
 }
 
 func TestDefaultStoreFileFallback(t *testing.T) {
+	t.Parallel()
 	s := testStore(t, nil, keyring.ErrNoAvailImpl)
 	assertRoundTrip(t, s, storeSourceFile, func(t *testing.T) {
 		path, err := s.filePath()
@@ -150,6 +152,7 @@ func TestDefaultStoreFileFallback(t *testing.T) {
 }
 
 func TestDefaultStoreNotFound(t *testing.T) {
+	t.Parallel()
 	kr := NewMockKeyring(gomock.NewController(t))
 	gomock.InOrder(
 		kr.EXPECT().Get(storeItem).Return(keyring.Item{}, keyring.ErrKeyNotFound).Times(1),
@@ -166,6 +169,7 @@ func TestDefaultStoreNotFound(t *testing.T) {
 }
 
 func TestDefaultStoreBrokenCredentials(t *testing.T) {
+	t.Parallel()
 	s := testStore(t, nil, keyring.ErrNoAvailImpl)
 	path, err := s.filePath()
 	require.NoError(t, err)

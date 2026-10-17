@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -17,15 +17,15 @@ import (
 	"github.com/akimon658/traq-cli/internal/client"
 )
 
-var authCmd = &cobra.Command{
-	Use:   "auth",
-	Short: "認証サブコマンド (login / logout / status)",
-}
-
-var loginCmd = &cobra.Command{
-	Use:   "login",
-	Short: "traQ にログインする",
-	Long: `traQ にログインします。
+func newAuthCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
+	authCmd := &cobra.Command{
+		Use:   "auth",
+		Short: "認証サブコマンド (login / logout / status)",
+	}
+	loginCmd := &cobra.Command{
+		Use:   "login",
+		Short: "traQ にログインする",
+		Long: `traQ にログインします。
 
 --browser を付けると OAuth2 authorization code flow (PKCE) でブラウザ経由でトークンを取得します。
   --scope read       読み取り専用 (デフォルト)
@@ -34,42 +34,50 @@ var loginCmd = &cobra.Command{
 (bot トークンと OAuth トークンのどちらも受け付け、種別は /users/me の応答から自動判別します)
 
 OAuth2 クライアント ID が未登録の場合は TRAQ_CLIENT_ID または --client-id を設定してください。`,
-	RunE: runLogin,
-}
-
-var logoutCmd = &cobra.Command{
-	Use:   "logout",
-	Short: "traQ からログアウトする",
-	RunE:  runLogout,
-}
-
-var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "現在の認証状態を表示する",
-	RunE:  runStatus,
-}
-
-func init() {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runLogin(cmd, newEnv, flags)
+		},
+	}
+	logoutCmd := &cobra.Command{
+		Use:   "logout",
+		Short: "traQ からログアウトする",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			e := newEnv()
+			flags.apply(cmd, e)
+			return runLogout(cmd, e)
+		},
+	}
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "現在の認証状態を表示する",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			e := newEnv()
+			flags.apply(cmd, e)
+			return runStatus(cmd, e)
+		},
+	}
 	loginCmd.Flags().Bool("browser", false, "OAuth2 authorization code flow (PKCE) でトークンを取得する")
 	loginCmd.Flags().String("scope", "read", "OAuth2 スコープ (read または read,write)")
 	authCmd.AddCommand(loginCmd, logoutCmd, statusCmd)
+	return authCmd
 }
 
-func runLogin(cmd *cobra.Command, _ []string) error {
+func runLogin(cmd *cobra.Command, newEnv func() *Env, flags *globalFlags) error {
 	e := newEnv()
+	flags.apply(cmd, e)
 	browser, _ := cmd.Flags().GetBool("browser")
 	scopeFlag, _ := cmd.Flags().GetString("scope")
 
-	if rootCmd.PersistentFlags().Changed("token") {
-		return loginWithToken(cmd.Context(), e, flagToken)
+	if cmd.Flags().Changed("token") {
+		return loginWithToken(cmd.Context(), cmd.OutOrStdout(), e, e.TokenOverride)
 	}
 	if !browser {
 		return &ExitCodeError{exitUsage, errors.New("specify either --browser or --token <TOKEN>")}
 	}
-	return login(cmd.Context(), e, scopeFlag, openBrowser)
+	return login(cmd.Context(), e, scopeFlag, openBrowser, cmd.OutOrStdout())
 }
 
-func loginWithToken(ctx context.Context, e *Env, value string) error {
+func loginWithToken(ctx context.Context, out io.Writer, e *Env, value string) error {
 	c := client.New(e.Origin)
 	me, resp, err := c.GetMe(ctx, value)
 	if err != nil {
@@ -99,19 +107,28 @@ func loginWithToken(ctx context.Context, e *Env, value string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf(
+	if _, err := fmt.Fprintf(
+		out,
 		"signed in: @%s (%s)\nstorage: %s\n",
 		t.UserName,
 		methodLabel(t.Method, t.UserBot),
 		venue,
-	)
+	); err != nil {
+		return err
+	}
 	return nil
 }
 
 // loginTimeout はブラウザログイン全体のタイムアウト。テストから短縮できるよう変数にしている。
 var loginTimeout = auth.LoginTimeout
 
-func login(ctx context.Context, e *Env, scopeFlag string, openBrowser func(url string)) error {
+func login(
+	ctx context.Context,
+	e *Env,
+	scopeFlag string,
+	openBrowser func(url string),
+	out io.Writer,
+) error {
 	ctx, cancel := context.WithTimeout(ctx, loginTimeout)
 	defer cancel()
 
@@ -130,10 +147,13 @@ func login(ctx context.Context, e *Env, scopeFlag string, openBrowser func(url s
 	defer cb.Close()
 	redirectURI := cb.RedirectURI()
 	authorizeURL := auth.AuthorizeURL(e.Origin, e.ClientID, redirectURI, scopes, pk)
-	fmt.Println("Open this URL to authorize traq-cli:")
-	fmt.Println(authorizeURL)
+	if _, err := fmt.Fprintln(out, "Open this URL to authorize traq-cli:"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out, authorizeURL); err != nil {
+		return err
+	}
 	openBrowser(authorizeURL)
-
 	code, err := cb.Wait(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -174,18 +194,20 @@ func login(ctx context.Context, e *Env, scopeFlag string, openBrowser func(url s
 	if err != nil {
 		return err
 	}
-	fmt.Printf(
+	if _, err := fmt.Fprintf(
+		out,
 		"signed in: @%s (%s) scopes: %s\nstorage: %s\n",
 		t.UserName,
 		methodLabel(t.Method, t.UserBot),
 		strings.Join(t.Scope, ","),
 		venue,
-	)
+	); err != nil {
+		return err
+	}
 	return nil
 }
 
-func runLogout(cmd *cobra.Command, _ []string) error {
-	e := newEnv()
+func runLogout(cmd *cobra.Command, e *Env) error {
 	stored, _, found, err := e.store().Load()
 	if err != nil {
 		return err
@@ -199,18 +221,23 @@ func runLogout(cmd *cobra.Command, _ []string) error {
 	origin := e.OriginOf(&stored)
 	if stored.Method == auth.MethodOAuth {
 		if rerr := auth.Revoke(cmd.Context(), origin, stored.AccessToken); rerr != nil {
-			fmt.Fprintln(os.Stderr, "failed to revoke the token on the server:", rerr)
+			_, _ = fmt.Fprintln(
+				cmd.ErrOrStderr(),
+				"failed to revoke the token on the server:",
+				rerr,
+			)
 		}
 	}
 	if _, err := e.store().Delete(); err != nil {
 		return err
 	}
-	fmt.Println("logged out")
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "logged out"); err != nil {
+		return err
+	}
 	return nil
 }
 
-func runStatus(cmd *cobra.Command, _ []string) error {
-	e := newEnv()
+func runStatus(cmd *cobra.Command, e *Env) error {
 	rt, err := e.resolveToken(cmd.Context())
 	if err != nil {
 		return err
@@ -251,7 +278,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	if !t.ExpiresAt.IsZero() {
 		out["expiresAt"] = t.ExpiresAt.Format(time.RFC3339)
 	}
-	if err := printJSON(out); err != nil {
+	if err := printJSON(cmd.OutOrStdout(), out); err != nil {
 		return err
 	}
 	if meErr != nil {

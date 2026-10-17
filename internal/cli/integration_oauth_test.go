@@ -194,20 +194,21 @@ func driveOAuthLogin(
 	t.Helper()
 	obs := &simObservations{}
 	var res loginResult
-	res.out, res.err = captureStdout(t, func() error {
-		res.err = login(
-			t.Context(),
-			&Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms},
-			scopeFlag,
-			browserSim(t, sess, submit, obs),
-		)
-		return res.err
-	})
+	var buf bytes.Buffer
+	res.err = login(
+		t.Context(),
+		&Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms},
+		scopeFlag,
+		browserSim(t, sess, submit, obs),
+		&buf,
+	)
+	res.out = buf.String()
 	res.sim = obs
 	return res
 }
 
 func TestAuthLoginBrowserRead(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
@@ -240,8 +241,8 @@ func TestAuthLoginBrowserRead(t *testing.T) {
 	assert.NotEmpty(t, saved.RefreshToken, "refresh token should be issued")
 
 	// 保存済みトークンで users me
-	overrideEnv(t, ms, clientID)
-	out, err := runCLI(t, "users", "me")
+	e := overrideEnv(t, ms, clientID)
+	out, err := runCLI(t, e, "users", "me")
 	require.NoError(t, err, "users me with the stored oauth token failed")
 	var me map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)
@@ -249,7 +250,7 @@ func TestAuthLoginBrowserRead(t *testing.T) {
 	assert.Equal(t, false, me["bot"])
 
 	// read スコープでは message send はスコープ不足
-	out, err = runCLI(t, "message", "send", "#general", "should be rejected by the scope check")
+	out, err = runCLI(t, e, "message", "send", "#general", "should be rejected by the scope check")
 	require.Error(t, err, "expected scope error, output: %s", out)
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)
@@ -258,6 +259,7 @@ func TestAuthLoginBrowserRead(t *testing.T) {
 }
 
 func TestAuthLoginBrowserWrite(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
@@ -280,13 +282,14 @@ func TestAuthLoginBrowserWrite(t *testing.T) {
 	assert.Equal(t, []string{auth.ScopeRead, auth.ScopeWrite}, saved.Scope)
 
 	const content = "hello traq-cli as oauth (read,write)"
-	overrideEnv(t, ms, clientID)
-	out, err := runCLI(t, "message", "send", "#general", content)
+	e := overrideEnv(t, ms, clientID)
+	out, err := runCLI(t, e, "message", "send", "#general", content)
 	require.NoError(t, err, "message send with the oauth token failed")
 	assertPosted(t, out, content)
 }
 
 func TestAuthLoginBrowserDenied(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
@@ -300,6 +303,7 @@ func TestAuthLoginBrowserDenied(t *testing.T) {
 }
 
 func TestAuthLoginTokenOAuthType(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
@@ -317,8 +321,8 @@ func TestAuthLoginTokenOAuthType(t *testing.T) {
 	oauthAccessToken := saves[0].AccessToken
 
 	// OAuth トークンを --token でログインすると、/users/me の応答から oauth と判別される
-	overrideEnv(t, ms, clientID)
-	out, err := runCLI(t, "auth", "login", "--token", oauthAccessToken)
+	e := overrideEnv(t, ms, clientID)
+	out, err := runCLI(t, e, "auth", "login", "--token", oauthAccessToken)
 	require.NoError(t, err, "token login failed")
 	assert.Contains(t, out, "signed in: @traq (user)")
 	require.Len(t, saves, 2)
@@ -330,6 +334,7 @@ func TestAuthLoginTokenOAuthType(t *testing.T) {
 }
 
 func TestAuthStatusOAuth(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
@@ -349,8 +354,8 @@ func TestAuthStatusOAuth(t *testing.T) {
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 
-	overrideEnv(t, ms, clientID)
-	out, err := runCLI(t, "auth", "status")
+	e := overrideEnv(t, ms, clientID)
+	out, err := runCLI(t, e, "auth", "status")
 	require.NoError(t, err, "auth status failed")
 	var status map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &status), "output is not JSON: %s", out)
@@ -368,6 +373,7 @@ func TestAuthStatusOAuth(t *testing.T) {
 }
 
 func TestAuthLogoutOAuth(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
@@ -390,8 +396,8 @@ func TestAuthLogoutOAuth(t *testing.T) {
 	require.NotEmpty(t, saved.AccessToken)
 
 	// logout でサーバー側のトークンが失効するはず
-	overrideEnv(t, ms, clientID)
-	out, err := runCLI(t, "auth", "logout")
+	e := overrideEnv(t, ms, clientID)
+	out, err := runCLI(t, e, "auth", "logout")
 	require.NoError(t, err, "auth logout failed")
 	assert.Contains(t, out, "logged out")
 	assert.Equal(t, http.StatusUnauthorized, apiMeStatus(t, saved.AccessToken))
@@ -399,9 +405,10 @@ func TestAuthLogoutOAuth(t *testing.T) {
 
 func TestAuthOAuthRefresh(t *testing.T) {
 	requireTraqStack(t)
-	clientID, sess := prepareOAuth(t)
 
 	t.Run("expired token", func(t *testing.T) {
+		t.Parallel()
+		clientID, sess := prepareOAuth(t)
 		ms := auth.NewMockStore(gomock.NewController(t))
 		var loggedIn, refreshed auth.Token
 		gomock.InOrder(
@@ -426,8 +433,8 @@ func TestAuthOAuthRefresh(t *testing.T) {
 		require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 		require.NotEmpty(t, loggedIn.RefreshToken)
 
-		overrideEnv(t, ms, clientID)
-		out, err := runCLI(t, "users", "me")
+		e := overrideEnv(t, ms, clientID)
+		out, err := runCLI(t, e, "users", "me")
 		require.NoError(t, err, "users me with an expired token should refresh it")
 		var me map[string]any
 		require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)
@@ -441,6 +448,8 @@ func TestAuthOAuthRefresh(t *testing.T) {
 	})
 
 	t.Run("401 then refresh", func(t *testing.T) {
+		t.Parallel()
+		clientID, sess := prepareOAuth(t)
 		ms := auth.NewMockStore(gomock.NewController(t))
 		var loggedIn, refreshed auth.Token
 		gomock.InOrder(
@@ -465,8 +474,8 @@ func TestAuthOAuthRefresh(t *testing.T) {
 		require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 		require.NotEmpty(t, loggedIn.RefreshToken)
 
-		overrideEnv(t, ms, clientID)
-		out, err := runCLI(t, "users", "me")
+		e := overrideEnv(t, ms, clientID)
+		out, err := runCLI(t, e, "users", "me")
 		require.NoError(t, err, "users me should refresh the token after a 401")
 		var me map[string]any
 		require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)

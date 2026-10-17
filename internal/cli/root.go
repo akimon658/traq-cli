@@ -32,37 +32,59 @@ func (e *ExitCodeError) Unwrap() error {
 	return e.Err
 }
 
-var (
-	flagToken    string
-	flagOrigin   string
-	flagClientID string
-)
-
-var rootCmd = &cobra.Command{
-	Use:   "traq",
-	Short: "traQ (https://github.com/traPtitech/traQ) を操作する CLI ツール",
-	CompletionOptions: cobra.CompletionOptions{
-		HiddenDefaultCmd: true,
-	},
-	SilenceUsage:  true,
-	SilenceErrors: true,
+// globalFlags は root の永続フラグの値を保持する。
+// コマンドツリーごとに独立させるため、パッケージ変数ではなくローカルに持つ。
+type globalFlags struct {
+	token    string
+	origin   string
+	clientID string
 }
 
-func init() {
+// apply は明示的に指定されたフラグだけを e に反映する。
+func (f *globalFlags) apply(cmd *cobra.Command, e *Env) {
+	if cmd.Flags().Changed("origin") {
+		e.Origin = f.origin
+	}
+	if cmd.Flags().Changed("client-id") {
+		e.ClientID = f.clientID
+	}
+	if cmd.Flags().Changed("token") {
+		e.TokenOverride = f.token
+	}
+}
+
+// newRootCmd はコマンドツリーを新しく構築して返す。newEnv は各コマンド実行時に
+// 呼ばれ、テストから Env を注入できるようにするためのもの。
+func newRootCmd(newEnv func() *Env) *cobra.Command {
+	flags := &globalFlags{}
+	rootCmd := &cobra.Command{
+		Use:   "traq",
+		Short: "traQ (https://github.com/traPtitech/traQ) を操作する CLI ツール",
+		CompletionOptions: cobra.CompletionOptions{
+			HiddenDefaultCmd: true,
+		},
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
 	rootCmd.PersistentFlags().
-		StringVar(&flagToken, "token", "", "使用するトークン (保存済みトークンを一時的に上書き; 省略時は環境変数 TRAQ_ACCESS_TOKEN)")
+		StringVar(&flags.token, "token", "", "使用するトークン (保存済みトークンを一時的に上書き; 省略時は環境変数 TRAQ_ACCESS_TOKEN)")
 	rootCmd.PersistentFlags().
-		StringVar(&flagOrigin, "origin", "", "traQ サーバーの origin (省略時は環境変数 TRAQ_ORIGIN)")
+		StringVar(&flags.origin, "origin", "", "traQ サーバーの origin (省略時は環境変数 TRAQ_ORIGIN)")
 	rootCmd.PersistentFlags().
-		StringVar(&flagClientID, "client-id", "", "OAuth2 クライアント ID (省略時は環境変数 TRAQ_CLIENT_ID)")
+		StringVar(&flags.clientID, "client-id", "", "OAuth2 クライアント ID (省略時は環境変数 TRAQ_CLIENT_ID)")
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &ExitCodeError{exitUsage, err}
 	})
-	rootCmd.AddCommand(authCmd, usersCmd, messageCmd)
+	rootCmd.AddCommand(
+		newAuthCmd(newEnv, flags),
+		newUsersCmd(newEnv, flags),
+		newMessageCmd(newEnv, flags),
+	)
+	return rootCmd
 }
 
 func Execute() int {
-	err := rootCmd.Execute()
+	err := newRootCmd(NewEnv).Execute()
 	if err == nil {
 		return 0
 	}

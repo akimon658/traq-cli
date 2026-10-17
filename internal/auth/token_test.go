@@ -8,6 +8,7 @@ import (
 )
 
 func TestParseScopes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		in   string
@@ -21,12 +22,14 @@ func TestParseScopes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, ParseScopes(tt.in))
 		})
 	}
 }
 
 func TestNormalizeScopes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		in      []string
@@ -41,6 +44,7 @@ func TestNormalizeScopes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := NormalizeScopes(tt.in)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -53,6 +57,7 @@ func TestNormalizeScopes(t *testing.T) {
 }
 
 func TestLacksScope(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		token Token
@@ -86,12 +91,14 @@ func TestLacksScope(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, tt.token.LacksScope(tt.scope))
 		})
 	}
 }
 
 func TestTokenExpired(t *testing.T) {
+	t.Parallel()
 	assert.True(t, (&Token{ExpiresAt: time.Now().Add(-time.Hour)}).Expired(),
 		"expired token should be expired")
 	assert.False(t, (&Token{ExpiresAt: time.Now().Add(time.Hour)}).Expired(),
@@ -101,6 +108,7 @@ func TestTokenExpired(t *testing.T) {
 }
 
 func TestContainsScope(t *testing.T) {
+	t.Parallel()
 	assert.True(t, ContainsScope([]string{"read", "write"}, ScopeWrite),
 		"should contain write")
 	assert.False(t, ContainsScope([]string{"read"}, ScopeWrite),

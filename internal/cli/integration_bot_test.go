@@ -13,11 +13,10 @@ import (
 )
 
 func TestUsersMe(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
-	t.Setenv("TRAQ_ORIGIN", testTraqOrigin)
-	t.Setenv("TRAQ_ACCESS_TOKEN", testTraqToken)
 
-	out, err := runCLI(t, "users", "me")
+	out, err := runCLI(t, botEnv(t, testTraqToken), "users", "me")
 	require.NoError(t, err, "users me failed")
 	var me map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)
@@ -27,11 +26,10 @@ func TestUsersMe(t *testing.T) {
 }
 
 func TestUsersMeInvalidToken(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
-	t.Setenv("TRAQ_ORIGIN", testTraqOrigin)
-	t.Setenv("TRAQ_ACCESS_TOKEN", "invalid")
 
-	_, err := runCLI(t, "users", "me")
+	_, err := runCLI(t, botEnv(t, "invalid"), "users", "me")
 	require.Error(t, err, "expected an error for the invalid token")
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)
@@ -40,31 +38,30 @@ func TestUsersMeInvalidToken(t *testing.T) {
 }
 
 func TestMessageSend(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
-	t.Setenv("TRAQ_ORIGIN", testTraqOrigin)
-	t.Setenv("TRAQ_ACCESS_TOKEN", testTraqToken)
 
 	const (
 		contentByPath = "hello traq-cli (by #general path)"
 		contentByUUID = "hello traq-cli (by channel UUID)"
 	)
 
-	out, err := runCLI(t, "message", "send", "#general", contentByPath)
+	e := botEnv(t, testTraqToken)
+	out, err := runCLI(t, e, "message", "send", "#general", contentByPath)
 	require.NoError(t, err, "message send failed")
 	assertPosted(t, out, contentByPath)
 
 	channelID := testGeneralChannelID(t)
-	out, err = runCLI(t, "message", "send", channelID, contentByUUID)
+	out, err = runCLI(t, e, "message", "send", channelID, contentByUUID)
 	require.NoError(t, err, "message send failed")
 	assertPosted(t, out, contentByUUID)
 }
 
 func TestMessageSendChannelNotFound(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
-	t.Setenv("TRAQ_ORIGIN", testTraqOrigin)
-	t.Setenv("TRAQ_ACCESS_TOKEN", testTraqToken)
 
-	out, err := runCLI(t, "message", "send", "#does-not-exist", "hello")
+	out, err := runCLI(t, botEnv(t, testTraqToken), "message", "send", "#does-not-exist", "hello")
 	require.Error(t, err, "expected an error for the nonexistent channel, output: %s", out)
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)
@@ -102,11 +99,10 @@ func testGeneralChannelID(t *testing.T) string {
 }
 
 func TestAuthStatus(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
-	t.Setenv("TRAQ_ORIGIN", testTraqOrigin)
-	t.Setenv("TRAQ_ACCESS_TOKEN", testTraqToken)
 
-	out, err := runCLI(t, "auth", "status")
+	out, err := runCLI(t, botEnv(t, testTraqToken), "auth", "status")
 	require.NoError(t, err, "auth status failed")
 	var status map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &status), "output is not JSON: %s", out)
@@ -123,7 +119,9 @@ func TestAuthStatus(t *testing.T) {
 }
 
 func TestAuthLoginUsage(t *testing.T) {
-	_, err := runCLI(t, "auth", "login")
+	t.Parallel()
+
+	_, err := runCLI(t, botEnv(t, ""), "auth", "login")
 	require.Error(t, err, "auth login without --browser or --token should fail")
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)
@@ -132,7 +130,9 @@ func TestAuthLoginUsage(t *testing.T) {
 }
 
 func TestAuthLoginTokenAndLogout(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
+
 	ms := auth.NewMockStore(gomock.NewController(t))
 	var saved auth.Token
 	gomock.InOrder(
@@ -146,9 +146,9 @@ func TestAuthLoginTokenAndLogout(t *testing.T) {
 		ms.EXPECT().Delete().Return(true, nil).Times(1),
 		ms.EXPECT().Load().Return(auth.Token{}, "", false, nil).Times(1),
 	)
-	overrideEnv(t, ms)
+	e := overrideEnv(t, ms)
 
-	out, err := runCLI(t, "auth", "login", "--token", testTraqToken)
+	out, err := runCLI(t, e, "auth", "login", "--token", testTraqToken)
 	require.NoError(t, err, "auth login failed")
 	assert.Contains(t, out, "signed in: @")
 	tok := saved
@@ -157,22 +157,24 @@ func TestAuthLoginTokenAndLogout(t *testing.T) {
 	assert.NotEmpty(t, tok.UserName, "userName is empty")
 	assert.Equal(t, testTraqOrigin, tok.Origin)
 
-	out, err = runCLI(t, "auth", "logout")
+	out, err = runCLI(t, e, "auth", "logout")
 	require.NoError(t, err, "auth logout failed")
 	assert.Contains(t, out, "logged out")
 
-	_, err = runCLI(t, "auth", "logout")
+	_, err = runCLI(t, e, "auth", "logout")
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, exitAuthRequired, ec.Code)
 }
 
 func TestAuthLoginInvalidToken(t *testing.T) {
+	t.Parallel()
 	requireTraqStack(t)
-	ms := auth.NewMockStore(gomock.NewController(t))
-	overrideEnv(t, ms)
 
-	_, err := runCLI(t, "auth", "login", "--token", "invalid")
+	ms := auth.NewMockStore(gomock.NewController(t))
+	e := overrideEnv(t, ms)
+
+	_, err := runCLI(t, e, "auth", "login", "--token", "invalid")
 	require.Error(t, err, "expected an error for the invalid token")
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)

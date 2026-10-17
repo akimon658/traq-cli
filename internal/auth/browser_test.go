@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewPKCE(t *testing.T) {
+	t.Parallel()
 	pk, err := NewPKCE()
 	require.NoError(t, err)
 	assert.Len(t, pk.Verifier, 64)
@@ -27,6 +28,7 @@ func TestNewPKCE(t *testing.T) {
 }
 
 func TestAuthorizeURL(t *testing.T) {
+	t.Parallel()
 	pk := PKCE{
 		Verifier:  "verifier123",
 		Challenge: "challenge123",
@@ -54,7 +56,9 @@ func TestAuthorizeURL(t *testing.T) {
 }
 
 func TestCallbackServer(t *testing.T) {
+	t.Parallel()
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		pk, err := NewPKCE()
 		require.NoError(t, err)
 		cb, err := ListenCallback(pk.State)
@@ -71,6 +75,7 @@ func TestCallbackServer(t *testing.T) {
 	})
 
 	t.Run("state mismatch", func(t *testing.T) {
+		t.Parallel()
 		pk, err := NewPKCE()
 		require.NoError(t, err)
 		cb, err := ListenCallback(pk.State)
@@ -83,6 +88,7 @@ func TestCallbackServer(t *testing.T) {
 	})
 
 	t.Run("error parameter", func(t *testing.T) {
+		t.Parallel()
 		pk, err := NewPKCE()
 		require.NoError(t, err)
 		cb, err := ListenCallback(pk.State)

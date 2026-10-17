@@ -15,17 +15,20 @@ type Env struct {
 	Origin   string
 	ClientID string
 	Store    auth.Store
+	// AccessToken は TRAQ_ACCESS_TOKEN の値。token のソースは environment として扱う。
+	AccessToken string
+	// TokenOverride は --token フラグの値。指定時は AccessToken より優先される。
+	TokenOverride string
 }
 
 func NewEnv() *Env {
 	return &Env{
-		Origin:   firstNonEmpty(flagOrigin, os.Getenv("TRAQ_ORIGIN"), auth.DefaultOrigin),
-		ClientID: firstNonEmpty(flagClientID, os.Getenv("TRAQ_CLIENT_ID"), auth.DefaultClientID),
-		Store:    auth.NewDefaultStore(),
+		Origin:      firstNonEmpty(os.Getenv("TRAQ_ORIGIN"), auth.DefaultOrigin),
+		ClientID:    firstNonEmpty(os.Getenv("TRAQ_CLIENT_ID"), auth.DefaultClientID),
+		Store:       auth.NewDefaultStore(),
+		AccessToken: os.Getenv("TRAQ_ACCESS_TOKEN"),
 	}
 }
-
-var newEnv = NewEnv
 
 func (e *Env) store() auth.Store {
 	if e.Store == nil {
@@ -49,10 +52,10 @@ type ResolvedToken struct {
 }
 
 func (e *Env) resolveToken(ctx context.Context) (ResolvedToken, error) {
-	t := firstNonEmpty(flagToken, os.Getenv("TRAQ_ACCESS_TOKEN"))
+	t := firstNonEmpty(e.TokenOverride, e.AccessToken)
 	if t != "" {
 		source := "environment"
-		if flagToken != "" {
+		if e.TokenOverride != "" {
 			source = "flag"
 		}
 		return ResolvedToken{

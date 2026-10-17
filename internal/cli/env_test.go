@@ -12,9 +12,14 @@ import (
 )
 
 func TestResolveTokenPrefersEnvironment(t *testing.T) {
-	t.Setenv("TRAQ_ACCESS_TOKEN", "env-token")
+	t.Parallel()
 	ms := auth.NewMockStore(gomock.NewController(t))
-	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: ms}
+	e := &Env{
+		Origin:      auth.DefaultOrigin,
+		ClientID:    "client",
+		Store:       ms,
+		AccessToken: "env-token",
+	}
 	rt, err := e.resolveToken(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "environment", rt.Source)
@@ -22,13 +27,15 @@ func TestResolveTokenPrefersEnvironment(t *testing.T) {
 }
 
 func TestResolveTokenPrefersFlag(t *testing.T) {
-	t.Setenv("TRAQ_ACCESS_TOKEN", "env-token")
-	oldFlagToken := flagToken
-	flagToken = "flag-token"
-	t.Cleanup(func() { flagToken = oldFlagToken })
-
+	t.Parallel()
 	ms := auth.NewMockStore(gomock.NewController(t))
-	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: ms}
+	e := &Env{
+		Origin:        auth.DefaultOrigin,
+		ClientID:      "client",
+		Store:         ms,
+		AccessToken:   "env-token",
+		TokenOverride: "flag-token",
+	}
 	rt, err := e.resolveToken(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "flag", rt.Source)
@@ -36,6 +43,7 @@ func TestResolveTokenPrefersFlag(t *testing.T) {
 }
 
 func TestResolveTokenFromStore(t *testing.T) {
+	t.Parallel()
 	ms := auth.NewMockStore(gomock.NewController(t))
 	ms.EXPECT().Load().Return(auth.Token{
 		Method:      auth.MethodOAuth,
@@ -52,6 +60,7 @@ func TestResolveTokenFromStore(t *testing.T) {
 }
 
 func TestResolveTokenNotAuthenticated(t *testing.T) {
+	t.Parallel()
 	ms := auth.NewMockStore(gomock.NewController(t))
 	ms.EXPECT().Load().Return(auth.Token{}, "", false, nil).Times(1)
 	e := &Env{Origin: auth.DefaultOrigin, ClientID: "client", Store: ms}
@@ -62,6 +71,7 @@ func TestResolveTokenNotAuthenticated(t *testing.T) {
 }
 
 func TestResolveTokenExpiredWithoutRefreshToken(t *testing.T) {
+	t.Parallel()
 	ms := auth.NewMockStore(gomock.NewController(t))
 	ms.EXPECT().Load().Return(auth.Token{
 		Method:      auth.MethodOAuth,

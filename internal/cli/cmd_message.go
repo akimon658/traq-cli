@@ -15,58 +15,58 @@ import (
 	"github.com/akimon658/traq-cli/internal/client"
 )
 
-var messageCmd = &cobra.Command{
-	Use:   "message",
-	Short: "メッセージ操作サブコマンド",
-}
-
 const minSendArgs = 2
 
-var sendMessageCmd = &cobra.Command{
-	Use:   "send <チャンネル> <本文>...",
-	Short: "チャンネルにメッセージを投稿する",
-	Long: `<チャンネル> はチャンネル UUID、または "#general/a/b" 形式のチャンネルパスで指定します。
+func newMessageCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
+	messageCmd := &cobra.Command{
+		Use:   "message",
+		Short: "メッセージ操作サブコマンド",
+	}
+	sendMessageCmd := &cobra.Command{
+		Use:   "send <チャンネル> <本文>...",
+		Short: "チャンネルにメッセージを投稿する",
+		Long: `<チャンネル> はチャンネル UUID、または "#general/a/b" 形式のチャンネルパスで指定します。
 "#" は省略できます。`,
-	Args: func(cmd *cobra.Command, args []string) error {
-		if err := cobra.MinimumNArgs(minSendArgs)(cmd, args); err != nil {
-			return &ExitCodeError{exitUsage, err}
-		}
-		return nil
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		e := newEnv()
-		rt, err := e.resolveToken(cmd.Context())
-		if err != nil {
-			return err
-		}
-		if err := e.requireScope(&rt, auth.ScopeWrite); err != nil {
-			return err
-		}
-		c := client.New(e.Origin)
-		ctx := cmd.Context()
-		channelID, err := resolveChannel(e, &rt, c, ctx, args[0])
-		if err != nil {
-			return err
-		}
-		content := strings.Join(args[1:], " ")
-		var msg *traq.Message
-		err = e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
-			var resp *http.Response
-			msg, resp, err = c.API.MessageAPI.
-				PostMessage(ctx, channelID).
-				PostMessageRequest(traq.PostMessageRequest{Content: content}).
-				Execute()
-			return resp, err
-		})
-		if err != nil {
-			return err
-		}
-		return printJSON(msg)
-	},
-}
-
-func init() {
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.MinimumNArgs(minSendArgs)(cmd, args); err != nil {
+				return &ExitCodeError{exitUsage, err}
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			e := newEnv()
+			flags.apply(cmd, e)
+			rt, err := e.resolveToken(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if err := e.requireScope(&rt, auth.ScopeWrite); err != nil {
+				return err
+			}
+			c := client.New(e.Origin)
+			ctx := cmd.Context()
+			channelID, err := resolveChannel(e, &rt, c, ctx, args[0])
+			if err != nil {
+				return err
+			}
+			content := strings.Join(args[1:], " ")
+			var msg *traq.Message
+			err = e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
+				var resp *http.Response
+				msg, resp, err = c.API.MessageAPI.
+					PostMessage(ctx, channelID).
+					PostMessageRequest(traq.PostMessageRequest{Content: content}).
+					Execute()
+				return resp, err
+			})
+			if err != nil {
+				return err
+			}
+			return printJSON(cmd.OutOrStdout(), msg)
+		},
+	}
 	messageCmd.AddCommand(sendMessageCmd)
+	return messageCmd
 }
 
 func resolveChannel(
