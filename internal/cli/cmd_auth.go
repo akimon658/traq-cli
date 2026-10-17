@@ -56,7 +56,7 @@ func init() {
 }
 
 func runLogin(cmd *cobra.Command, _ []string) error {
-	e := NewEnv()
+	e := newEnv()
 	browser, _ := cmd.Flags().GetBool("browser")
 	scopeFlag, _ := cmd.Flags().GetString("scope")
 
@@ -183,7 +183,7 @@ func loginWithBrowser(e *Env, scopeFlag string) error {
 }
 
 func runLogout(_ *cobra.Command, _ []string) error {
-	e := NewEnv()
+	e := newEnv()
 	stored, _, found, err := e.store().Load()
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func runLogout(_ *cobra.Command, _ []string) error {
 }
 
 func runStatus(_ *cobra.Command, _ []string) error {
-	e := NewEnv()
+	e := newEnv()
 	rt, err := e.resolveToken()
 	if err != nil {
 		return err

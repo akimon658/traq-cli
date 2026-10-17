@@ -27,7 +27,7 @@ var usersMeCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(_ *cobra.Command, _ []string) error {
-		e := NewEnv()
+		e := newEnv()
 		rt, err := e.resolveToken()
 		if err != nil {
 			return err

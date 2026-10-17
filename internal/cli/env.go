@@ -25,6 +25,8 @@ func NewEnv() *Env {
 	}
 }
 
+var newEnv = NewEnv
+
 func (e *Env) store() auth.Store {
 	if e.Store == nil {
 		return auth.NewDefaultStore()

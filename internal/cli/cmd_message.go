@@ -34,7 +34,7 @@ var sendMessageCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(_ *cobra.Command, args []string) error {
-		e := NewEnv()
+		e := newEnv()
 		rt, err := e.resolveToken()
 		if err != nil {
 			return err
