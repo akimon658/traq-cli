@@ -33,8 +33,10 @@ traPtitech/traQ (master) のコード確認に基づく前提。
 ## CLI サーフェス
 
 ```
-traq auth login --browser [--scope read|read,write]   # OAuth code flow (PKCE + ループバック)
-traq auth login --token <TOKEN>                        # Bot トークン / 手動取得の OAuth トークン (自動判別)
+traq auth login --browser [--scope read|read,write]      # OAuth code flow (PKCE + ループバック)
+traq auth login --manual [--scope read|read,write]       # ブラウザを開かず認可 URL のみ出力 (auth complete と組み合わせる)
+traq auth complete <URL>                                 # 手動ログインを完了する
+traq auth login --token <TOKEN>                          # Bot トークン / 手動取得の OAuth トークン (自動判別)
 traq auth logout
 traq auth status
 ```
@@ -67,7 +69,30 @@ traQ サーバー上 (q.trap.jp) に traq-cli 用の OAuth2 クライアント�
 
 全体のタイムアウトは 5 分 (traQ の認可コード寿命に合わせる)。
 
-SSH 先や headless 環境ではブラウザが同マシンで開けないため、`traq auth login --token` (bot トークンおよび手動で取得したトークンの貼り付け) が普遍的なフォールバックとなる。
+### 手動ログインフロー (--manual + auth complete)
+
+SSH 先や headless 環境など、ブラウザが同マシンで開けない場合の 2 ステップフロー。traQ が device flow / OOB に非対応のため、リダイレクトを手動で転送する。
+
+1. `traq auth login --manual [--scope ...]`:
+   - PKCE (verifier / state / challenge) を生成し、セッションを `login-session.json` に保存する
+   - redirect URI はローカルサーバーを立てないため登録時と同じ `http://127.0.0.1/callback` (ポート暗黙 80) を使う
+   - 認可 URL と完了コマンド (`traq auth complete "<URL>"`) を出力して終了する (ブラウザも開かない)
+2. ユーザーがブラウザ上でtraQにログインして承認すると、リダイレクト先 (CLI 実行マシンのループバック `http://127.0.0.1/callback`) はページとしては開けないが、URL はアドレスバーに残る。その URL 全体をコピーして `complete` を実行する環境へ転送する
+3. `traq auth complete <URL>`:
+   - 引数は完全 URL のほか `?code=...` / `code=...&state=...` のようなクエリ文字列も受け付ける
+   - `error` パラメータ (拒否) は exit 1、形式不正は exit 2、セッション不在は exit 3
+   - state (含まれる場合) をセッションと照合し、不一致なら失敗する
+   - セッション記録の origin / client_id / redirect_uri / verifier を使ってトークン交換し、ブラウザフローと同じ後半処理 (検証・保存・出力) に合流する
+
+仕様:
+
+- セッションは `UserConfigDir/traq-cli/login-session.json` に 0600 (ディレクトリ 0700) で保存する。一時ファイルであり keyring は使わない
+- セッションの寿命 (`auth.ManualSessionTTL`) は 15 分。期限切れセッションは Load 時に削除される
+- 認可コードは 1 回限りで寿命 5 分。トークン保存成功時にセッションを削除し、交換に失敗した場合は再試行のため残す
+- `login --manual` の再実行でセッションは上書きされる (複数セッションは保持しない)
+- `--manual` は `--browser` / `--token` と併用できない (exit 2)
+
+ブラウザが同マシンで開けない場合でも、bot トークンや手動取得したトークンの貼り付け (`traq auth login --token`) はクラシックなフォールバックとして使える。
 
 ## クレデンシャルの扱い
 

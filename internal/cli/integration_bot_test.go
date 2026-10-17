@@ -126,7 +126,7 @@ func TestAuthLoginUsage(t *testing.T) {
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, exitUsage, ec.Code)
-	assert.Contains(t, err.Error(), "specify either --browser or --token")
+	assert.Contains(t, err.Error(), "specify either --browser, --manual or --token")
 }
 
 func TestAuthLoginTokenAndLogout(t *testing.T) {

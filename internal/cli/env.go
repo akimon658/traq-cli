@@ -15,6 +15,9 @@ type Env struct {
 	Origin   string
 	ClientID string
 	Store    auth.Store
+	// Sessions は手動ログイン (--manual) のセッション保存先。nil の場合は
+	// auth.NewDefaultSessionStore を使う。
+	Sessions auth.SessionStore
 	// AccessToken は TRAQ_ACCESS_TOKEN の値。token のソースは environment として扱う。
 	AccessToken string
 	// TokenOverride は --token フラグの値。指定時は AccessToken より優先される。
@@ -35,6 +38,13 @@ func (e *Env) store() auth.Store {
 		return auth.NewDefaultStore()
 	}
 	return e.Store
+}
+
+func (e *Env) sessions() auth.SessionStore {
+	if e.Sessions == nil {
+		return auth.NewDefaultSessionStore()
+	}
+	return e.Sessions
 }
 
 func firstNonEmpty(ss ...string) string {

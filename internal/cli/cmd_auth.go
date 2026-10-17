@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -28,6 +29,10 @@ func newAuthCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 		Long: `traQ にログインします。
 
 --browser を付けると OAuth2 authorization code flow (PKCE) でブラウザ経由でトークンを取得します。
+--manual を付けるとブラウザを開かずに認可 URL のみを出力します。
+ブラウザで承認した後にリダイレクトされる URL (開けなくても問題ありません) を
+traq auth complete に渡すことでログインを完了します。
+SSH 先や headless 環境など、ブラウザが同マシンで開けない場合に使います。
   --scope read       読み取り専用 (デフォルト)
   --scope read,write 読み書き (ユーザーと同等の権限)
 --token <TOKEN> を付けると、Bot 管理画面などで発行したトークンを直接登録します。
@@ -56,9 +61,23 @@ OAuth2 クライアント ID が未登録の場合は TRAQ_CLIENT_ID または -
 			return runStatus(cmd, e)
 		},
 	}
+	completeCmd := &cobra.Command{
+		Use:   "complete <URL>",
+		Short: "手動ログイン (login --manual) を完了する",
+		Long: `traq auth login --manual で発行した認可 URL でブラウザ上の承認を終えた後、
+ブラウザのアドレスバーに表示されるリダイレクト先の URL を引数として渡し、ログインを完了します。
+リダイレクト先は開けなくても問題ありません。URL に含まれる認可コードの有効期限は約 5 分です。`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			e := newEnv()
+			flags.apply(cmd, e)
+			return runComplete(cmd.Context(), cmd, e, args[0])
+		},
+	}
 	loginCmd.Flags().Bool("browser", false, "OAuth2 authorization code flow (PKCE) でトークンを取得する")
+	loginCmd.Flags().Bool("manual", false, "ブラウザを開かず認可 URL のみを出力する (traq auth complete と組み合わせる)")
 	loginCmd.Flags().String("scope", "read", "OAuth2 スコープ (read または read,write)")
-	authCmd.AddCommand(loginCmd, logoutCmd, statusCmd)
+	authCmd.AddCommand(loginCmd, completeCmd, logoutCmd, statusCmd)
 	return authCmd
 }
 
@@ -66,13 +85,26 @@ func runLogin(cmd *cobra.Command, newEnv func() *Env, flags *globalFlags) error 
 	e := newEnv()
 	flags.apply(cmd, e)
 	browser, _ := cmd.Flags().GetBool("browser")
+	manual, _ := cmd.Flags().GetBool("manual")
 	scopeFlag, _ := cmd.Flags().GetString("scope")
 
 	if cmd.Flags().Changed("token") {
+		if manual {
+			return &ExitCodeError{exitUsage, errors.New("cannot combine --token with --manual")}
+		}
 		return loginWithToken(cmd.Context(), cmd.OutOrStdout(), e, e.TokenOverride)
 	}
+	if manual {
+		if browser {
+			return &ExitCodeError{exitUsage, errors.New("cannot combine --browser with --manual")}
+		}
+		return runManualLogin(cmd.Context(), e, scopeFlag, cmd.OutOrStdout())
+	}
 	if !browser {
-		return &ExitCodeError{exitUsage, errors.New("specify either --browser or --token <TOKEN>")}
+		return &ExitCodeError{
+			exitUsage,
+			errors.New("specify either --browser, --manual or --token <TOKEN>"),
+		}
 	}
 	return login(cmd.Context(), e, scopeFlag, openBrowser, cmd.OutOrStdout())
 }
@@ -161,14 +193,25 @@ func login(
 		}
 		return err
 	}
+	return finishLogin(ctx, e, out, code, redirectURI, pk.Verifier, scopes)
+}
 
-	resp, err := auth.ExchangeCode(ctx, e.Origin, e.ClientID, redirectURI, code, pk.Verifier)
+// finishLogin は認可コードをトークンに交換し、/users/me で検証して保存する。
+// ブラウザフロー (login --browser) と手動フロー (traq auth complete) の共通後半処理。
+func finishLogin(
+	ctx context.Context,
+	e *Env,
+	out io.Writer,
+	code, redirectURI, verifier string,
+	fallbackScopes []string,
+) error {
+	resp, err := auth.ExchangeCode(ctx, e.Origin, e.ClientID, redirectURI, code, verifier)
 	if err != nil {
 		return err
 	}
 	scopeList := auth.ParseScopes(resp.Scope)
 	if len(scopeList) == 0 {
-		scopeList = scopes
+		scopeList = fallbackScopes
 	}
 
 	c := client.New(e.Origin)
@@ -202,6 +245,132 @@ func login(
 		strings.Join(t.Scope, ","),
 		venue,
 	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func runManualLogin(_ context.Context, e *Env, scopeFlag string, out io.Writer) error {
+	if e.ClientID == "" {
+		return &ExitCodeError{
+			exitUsage,
+			errors.New(
+				"OAuth client ID is not configured; set TRAQ_CLIENT_ID or --client-id (see docs/auth.md)",
+			),
+		}
+	}
+	scopes, err := auth.NormalizeScopes(auth.ParseScopes(scopeFlag))
+	if err != nil {
+		return &ExitCodeError{exitUsage, err}
+	}
+	pk, err := auth.NewPKCE()
+	if err != nil {
+		return err
+	}
+	sess := auth.ManualSession{
+		Verifier:    pk.Verifier,
+		State:       pk.State,
+		RedirectURI: auth.ManualRedirectURI,
+		Origin:      e.Origin,
+		ClientID:    e.ClientID,
+		Scopes:      scopes,
+		CreatedAt:   time.Now(),
+	}
+	if _, err := e.sessions().Save(sess); err != nil {
+		return err
+	}
+	authorizeURL := auth.AuthorizeURL(sess.Origin, sess.ClientID, sess.RedirectURI, scopes, pk)
+	if _, err := fmt.Fprintln(
+		out,
+		"Open this URL in a browser to authorize traq-cli:",
+	); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out, authorizeURL); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(
+		out,
+		"The page after authorization will fail to load; this is expected.\n"+
+			"Copy the URL from the browser's address bar and run:\n"+
+			"  traq auth complete \"<URL>\"\n"+
+			"(the one-time code is valid for about 5 minutes; the pending login expires in %s)\n",
+		auth.ManualSessionTTL,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+// parseCallback は traq auth complete の引数から code と state を取り出す。
+// 完全な URL のほか、"?code=..." や "code=...&state=..." のようなクエリ文字列も受け付ける。
+// 形式が不正なら err を (usage エラー)、ユーザーが拒否したなら denied を返す。
+func parseCallback(raw string) (code, state string, denied, err error) {
+	raw = strings.TrimSpace(raw)
+	var q url.Values
+	if u, uerr := url.Parse(raw); uerr == nil && u.RawQuery != "" {
+		q = u.Query()
+	} else {
+		trimmed := strings.TrimPrefix(raw, "?")
+		q, err = url.ParseQuery(trimmed)
+		if err != nil {
+			return "", "", nil, errors.New("the callback is neither a URL nor a query string")
+		}
+	}
+	if e := q.Get("error"); e != "" {
+		d := q.Get("error_description")
+		if d != "" {
+			return "", "", fmt.Errorf("authorization was denied (%s: %s)", e, d), nil
+		}
+		return "", "", fmt.Errorf("authorization was denied (%s)", e), nil
+	}
+	if q.Get("code") == "" {
+		return "", "", nil, errors.New("no code in the callback")
+	}
+	return q.Get("code"), q.Get("state"), nil, nil
+}
+
+func runComplete(ctx context.Context, cmd *cobra.Command, e *Env, callback string) error {
+	code, state, denied, err := parseCallback(callback)
+	if err != nil {
+		return &ExitCodeError{exitUsage, err}
+	}
+	if denied != nil {
+		return &ExitCodeError{exitGeneral, denied}
+	}
+	sess, found, err := e.sessions().Load(time.Now())
+	if err != nil {
+		return err
+	}
+	if !found {
+		return &ExitCodeError{
+			exitAuthRequired,
+			errors.New("no pending manual login: run 'traq auth login --manual' first"),
+		}
+	}
+	if state != "" && state != sess.State {
+		return &ExitCodeError{exitGeneral, errors.New(
+			"authorization callback state mismatch; " +
+				"re-run 'traq auth login --manual' and use the new URL",
+		)}
+	}
+
+	sessEnv := *e
+	sessEnv.Origin = sess.Origin
+	sessEnv.ClientID = sess.ClientID
+	if err := finishLogin(
+		ctx,
+		&sessEnv,
+		cmd.OutOrStdout(),
+		code,
+		sess.RedirectURI,
+		sess.Verifier,
+		sess.Scopes,
+	); err != nil {
+		return err
+	}
+	// 認可コードは 1 回限りなので、トークン保存まで成功したらセッションを消す
+	if _, err := e.sessions().Delete(); err != nil {
 		return err
 	}
 	return nil
