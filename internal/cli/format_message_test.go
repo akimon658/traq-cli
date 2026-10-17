@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moznion/go-optional"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -112,12 +113,12 @@ func TestWriteMessageListUnreadDivider(t *testing.T) {
 		users:  users,
 		stamps: map[string]string{},
 		loc:    time.UTC,
-		unread: &traq.UnreadChannel{
+		unread: optional.Some(traq.UnreadChannel{
 			ChannelId:       "c1",
 			Count:           5,
 			Noticeable:      true,
 			OldestMessageId: "m2",
-		},
+		}),
 	}))
 
 	out := buf.String()
@@ -134,13 +135,18 @@ func TestWriteMessageListUnreadNotInPage(t *testing.T) {
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
 	require.NoError(t, writeMessageList(&buf, messageList{
-		label: "#general", limit: 10, order: "desc",
+		label: "#general",
+		limit: 10,
+		order: "desc",
 		msgs: []traq.Message{
 			{Id: "m1", UserId: "u1", Content: "hi", CreatedAt: base, UpdatedAt: base},
 		},
 		users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-		stamps: map[string]string{}, loc: time.UTC,
-		unread: &traq.UnreadChannel{ChannelId: "c1", Count: 3, OldestMessageId: "other"},
+		stamps: map[string]string{},
+		loc:    time.UTC,
+		unread: optional.Some(
+			traq.UnreadChannel{ChannelId: "c1", Count: 3, OldestMessageId: "other"},
+		),
 	}))
 	assert.Contains(t, buf.String(), "# 未読 3 件 (このページに未読の先頭は含まれない)")
 }

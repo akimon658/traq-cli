@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moznion/go-optional"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/traPtitech/go-traq"
@@ -63,7 +64,7 @@ func TestWriteMessageListSearchHeader(t *testing.T) {
 		users:     map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
 		stamps:    map[string]string{},
 		loc:       time.UTC,
-		totalHits: &total,
+		totalHits: optional.Some(total),
 	}))
 	out := buf.String()
 	assert.Contains(t, out, "search \"foo\" (全42件中 1件 limit=10 offset=0 sort=-createdAt)")

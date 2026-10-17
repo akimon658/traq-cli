@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moznion/go-optional"
 	"github.com/traPtitech/go-traq"
 )
 
@@ -63,8 +64,8 @@ func (c *Client) GetMe(
 type MessageQuery struct {
 	Limit     int32
 	Offset    int32
-	Since     *time.Time
-	Until     *time.Time
+	Since     optional.Option[time.Time]
+	Until     optional.Option[time.Time]
 	Inclusive bool
 	Order     string
 }
@@ -80,35 +81,30 @@ func (c *Client) GetChannelMessages(
 		Offset(q.Offset).
 		Inclusive(q.Inclusive).
 		Order(q.Order)
-	if q.Since != nil {
-		req = req.Since(*q.Since)
-	}
-	if q.Until != nil {
-		req = req.Until(*q.Until)
-	}
+	q.Since.IfSome(func(v time.Time) {
+		req = req.Since(v)
+	})
+	q.Until.IfSome(func(v time.Time) {
+		req = req.Until(v)
+	})
 	return req.Execute()
 }
 
 // SearchQuery はメッセージ検索 (GET /messages) のパラメータ。
-// ポインタのフィールドは未指定 (API に送らない) を表す。
 type SearchQuery struct {
-	Word           string
-	After          *time.Time
-	Before         *time.Time
-	In             string
-	InSet          bool
-	To             []string
-	ToSet          bool
-	From           []string
-	FromSet        bool
-	Citation       string
-	CitationSet    bool
-	Bot            *bool
-	HasURL         *bool
-	HasAttachments *bool
-	HasImage       *bool
-	HasVideo       *bool
-	HasAudio       *bool
+	Word           optional.Option[string]
+	After          optional.Option[time.Time]
+	Before         optional.Option[time.Time]
+	In             optional.Option[string]
+	To             optional.Option[[]string]
+	From           optional.Option[[]string]
+	Citation       optional.Option[string]
+	Bot            optional.Option[bool]
+	HasURL         optional.Option[bool]
+	HasAttachments optional.Option[bool]
+	HasImage       optional.Option[bool]
+	HasVideo       optional.Option[bool]
+	HasAudio       optional.Option[bool]
 	Limit          int32
 	Offset         int32
 	Sort           string
@@ -123,45 +119,45 @@ func (c *Client) SearchMessages(
 		Limit(q.Limit).
 		Offset(q.Offset).
 		Sort(q.Sort)
-	if q.Word != "" {
-		req = req.Word(q.Word)
-	}
-	if q.After != nil {
-		req = req.After(*q.After)
-	}
-	if q.Before != nil {
-		req = req.Before(*q.Before)
-	}
-	if q.InSet {
-		req = req.In(q.In)
-	}
-	if q.ToSet {
-		req = req.To(q.To)
-	}
-	if q.FromSet {
-		req = req.From(q.From)
-	}
-	if q.CitationSet {
-		req = req.Citation(q.Citation)
-	}
-	if q.Bot != nil {
-		req = req.Bot(*q.Bot)
-	}
-	if q.HasURL != nil {
-		req = req.HasURL(*q.HasURL)
-	}
-	if q.HasAttachments != nil {
-		req = req.HasAttachments(*q.HasAttachments)
-	}
-	if q.HasImage != nil {
-		req = req.HasImage(*q.HasImage)
-	}
-	if q.HasVideo != nil {
-		req = req.HasVideo(*q.HasVideo)
-	}
-	if q.HasAudio != nil {
-		req = req.HasAudio(*q.HasAudio)
-	}
+	q.Word.IfSome(func(v string) {
+		req = req.Word(v)
+	})
+	q.After.IfSome(func(v time.Time) {
+		req = req.After(v)
+	})
+	q.Before.IfSome(func(v time.Time) {
+		req = req.Before(v)
+	})
+	q.In.IfSome(func(v string) {
+		req = req.In(v)
+	})
+	q.To.IfSome(func(v []string) {
+		req = req.To(v)
+	})
+	q.From.IfSome(func(v []string) {
+		req = req.From(v)
+	})
+	q.Citation.IfSome(func(v string) {
+		req = req.Citation(v)
+	})
+	q.Bot.IfSome(func(v bool) {
+		req = req.Bot(v)
+	})
+	q.HasURL.IfSome(func(v bool) {
+		req = req.HasURL(v)
+	})
+	q.HasAttachments.IfSome(func(v bool) {
+		req = req.HasAttachments(v)
+	})
+	q.HasImage.IfSome(func(v bool) {
+		req = req.HasImage(v)
+	})
+	q.HasVideo.IfSome(func(v bool) {
+		req = req.HasVideo(v)
+	})
+	q.HasAudio.IfSome(func(v bool) {
+		req = req.HasAudio(v)
+	})
 	return req.Execute()
 }
 

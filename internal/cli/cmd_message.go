@@ -8,6 +8,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/moznion/go-optional"
 	"github.com/spf13/cobra"
 
 	"github.com/traPtitech/go-traq"
@@ -224,7 +225,7 @@ func runMessageList(
 		}
 	}
 
-	var unread *traq.UnreadChannel
+	var unread optional.Option[traq.UnreadChannel]
 	if opts.showUnread {
 		// 未読情報は表示の補助なので、取得に失敗しても本体の表示は続行する。
 		var list []traq.UnreadChannel
@@ -237,7 +238,7 @@ func runMessageList(
 		if uerr == nil {
 			for i := range list {
 				if list[i].ChannelId == channelID {
-					unread = &list[i]
+					unread = optional.Some(list[i])
 					break
 				}
 			}
@@ -266,17 +267,17 @@ func channelLabel(target string) string {
 	return "#" + strings.TrimPrefix(target, "#")
 }
 
-func parseRFC3339Flag(name, value string) (*time.Time, error) {
+func parseRFC3339Flag(name, value string) (optional.Option[time.Time], error) {
 	if value == "" {
-		return nil, nil
+		return optional.None[time.Time](), nil
 	}
 	t, err := time.Parse(time.RFC3339, value)
 	if err != nil {
-		return nil, &ExitCodeError{exitUsage, fmt.Errorf(
+		return optional.None[time.Time](), &ExitCodeError{exitUsage, fmt.Errorf(
 			"invalid --%s: %v (use RFC3339, e.g. 2026-01-02T15:04:05Z)", name, err,
 		)}
 	}
-	return &t, nil
+	return optional.Some(t), nil
 }
 
 func resolveChannel(

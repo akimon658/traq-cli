@@ -8,6 +8,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/moznion/go-optional"
 	"github.com/spf13/cobra"
 	"github.com/traPtitech/go-traq"
 
@@ -72,18 +73,12 @@ func newMessageSearchCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command 
 				after:          afterStr,
 				before:         beforeStr,
 				citation:       citation,
-				botChanged:     cmd.Flags().Changed("bot"),
-				bot:            bot,
-				hasURLChanged:  cmd.Flags().Changed("has-url"),
-				hasURL:         hasURL,
-				hasAttChanged:  cmd.Flags().Changed("has-attachments"),
-				hasAttachments: hasAttachments,
-				hasImgChanged:  cmd.Flags().Changed("has-image"),
-				hasImage:       hasImage,
-				hasVidChanged:  cmd.Flags().Changed("has-video"),
-				hasVideo:       hasVideo,
-				hasAudChanged:  cmd.Flags().Changed("has-audio"),
-				hasAudio:       hasAudio,
+				bot:            changedBoolFlag(cmd, "bot", bot),
+				hasURL:         changedBoolFlag(cmd, "has-url", hasURL),
+				hasAttachments: changedBoolFlag(cmd, "has-attachments", hasAttachments),
+				hasImage:       changedBoolFlag(cmd, "has-image", hasImage),
+				hasVideo:       changedBoolFlag(cmd, "has-video", hasVideo),
+				hasAudio:       changedBoolFlag(cmd, "has-audio", hasAudio),
 				limit:          limit,
 				offset:         offset,
 				sort:           sort,
@@ -116,21 +111,23 @@ type searchOptions struct {
 	after          string
 	before         string
 	citation       string
-	botChanged     bool
-	bot            bool
-	hasURLChanged  bool
-	hasURL         bool
-	hasAttChanged  bool
-	hasAttachments bool
-	hasImgChanged  bool
-	hasImage       bool
-	hasVidChanged  bool
-	hasVideo       bool
-	hasAudChanged  bool
-	hasAudio       bool
+	bot            optional.Option[bool]
+	hasURL         optional.Option[bool]
+	hasAttachments optional.Option[bool]
+	hasImage       optional.Option[bool]
+	hasVideo       optional.Option[bool]
+	hasAudio       optional.Option[bool]
 	limit          int
 	offset         int
 	sort           string
+}
+
+// changedBoolFlag はフラグが指定されたときのみ Some を返す。
+func changedBoolFlag(cmd *cobra.Command, name string, value bool) optional.Option[bool] {
+	if !cmd.Flags().Changed(name) {
+		return optional.None[bool]()
+	}
+	return optional.Some(value)
 }
 
 func runMessageSearch(
@@ -203,64 +200,44 @@ func runMessageSearch(
 	}
 
 	q := client.SearchQuery{
-		Word:   word,
-		After:  after,
-		Before: before,
-		Limit:  int32(opts.limit),
-		Offset: int32(opts.offset),
-		Sort:   opts.sort,
+		After:          after,
+		Before:         before,
+		Bot:            opts.bot,
+		HasURL:         opts.hasURL,
+		HasAttachments: opts.hasAttachments,
+		HasImage:       opts.hasImage,
+		HasVideo:       opts.hasVideo,
+		HasAudio:       opts.hasAudio,
+		Limit:          int32(opts.limit),
+		Offset:         int32(opts.offset),
+		Sort:           opts.sort,
+	}
+	if word != "" {
+		q.Word = optional.Some(word)
 	}
 	if opts.in != "" {
 		channelID, err := resolveChannel(e, &rt, c, ctx, opts.in)
 		if err != nil {
 			return err
 		}
-		q.In = channelID
-		q.InSet = true
+		q.In = optional.Some(channelID)
 	}
-	if len(cleanUserInputs(opts.from)) > 0 {
-		ids, err := resolveUserIDs(cleanUserInputs(opts.from), nameToID)
+	if from := cleanUserInputs(opts.from); len(from) > 0 {
+		ids, err := resolveUserIDs(from, nameToID)
 		if err != nil {
 			return &ExitCodeError{exitUsage, fmt.Errorf("invalid --from: %v", err)}
 		}
-		q.From = ids
-		q.FromSet = true
+		q.From = optional.Some(ids)
 	}
-	if len(cleanUserInputs(opts.to)) > 0 {
-		ids, err := resolveUserIDs(cleanUserInputs(opts.to), nameToID)
+	if to := cleanUserInputs(opts.to); len(to) > 0 {
+		ids, err := resolveUserIDs(to, nameToID)
 		if err != nil {
 			return &ExitCodeError{exitUsage, fmt.Errorf("invalid --to: %v", err)}
 		}
-		q.To = ids
-		q.ToSet = true
+		q.To = optional.Some(ids)
 	}
 	if opts.citation != "" {
-		q.Citation = opts.citation
-		q.CitationSet = true
-	}
-	if opts.botChanged {
-		b := opts.bot
-		q.Bot = &b
-	}
-	if opts.hasURLChanged {
-		b := opts.hasURL
-		q.HasURL = &b
-	}
-	if opts.hasAttChanged {
-		b := opts.hasAttachments
-		q.HasAttachments = &b
-	}
-	if opts.hasImgChanged {
-		b := opts.hasImage
-		q.HasImage = &b
-	}
-	if opts.hasVidChanged {
-		b := opts.hasVideo
-		q.HasVideo = &b
-	}
-	if opts.hasAudChanged {
-		b := opts.hasAudio
-		q.HasAudio = &b
+		q.Citation = optional.Some(opts.citation)
 	}
 
 	var result *traq.MessageSearchResult
@@ -298,7 +275,7 @@ func runMessageSearch(
 		users:     userByID,
 		stamps:    stampNames,
 		loc:       time.Local,
-		totalHits: &total,
+		totalHits: optional.Some(total),
 		sort:      opts.sort,
 	})
 }

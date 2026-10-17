@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moznion/go-optional"
 	"github.com/traPtitech/go-traq"
 )
 
@@ -19,9 +20,9 @@ type messageList struct {
 	users  map[string]traq.User
 	stamps map[string]string
 	loc    *time.Location
-	unread *traq.UnreadChannel
-	// totalHits が nil でなければ検索結果として表示する。
-	totalHits *int64
+	unread optional.Option[traq.UnreadChannel]
+	// totalHits が Some なら検索結果として表示する。
+	totalHits optional.Option[int64]
 	sort      string
 }
 
@@ -37,10 +38,10 @@ func writeMessageList(w io.Writer, ml messageList) error {
 		return msgs[i].Id < msgs[j].Id
 	})
 
-	if ml.totalHits != nil {
+	if total, err := ml.totalHits.Take(); err == nil {
 		if _, err := fmt.Fprintf(
 			w, "%s (全%d件中 %d件 limit=%d offset=%d sort=%s)\n\n",
-			ml.label, *ml.totalHits, len(msgs), ml.limit, ml.offset, ml.sort,
+			ml.label, total, len(msgs), ml.limit, ml.offset, ml.sort,
 		); err != nil {
 			return err
 		}
@@ -51,11 +52,15 @@ func writeMessageList(w io.Writer, ml messageList) error {
 		return err
 	}
 
-	divider := unreadDivider(ml.unread)
+	unread, uerr := ml.unread.Take()
+	divider := ""
+	if uerr == nil {
+		divider = unreadDivider(unread)
+	}
 	dividerAt := -1
 	if divider != "" {
 		for i, m := range msgs {
-			if m.Id == ml.unread.OldestMessageId {
+			if m.Id == unread.OldestMessageId {
 				dividerAt = i
 				break
 			}
@@ -76,7 +81,7 @@ func writeMessageList(w io.Writer, ml messageList) error {
 	// 未読はあるが、その先頭がこのページに含まれない場合は注記だけ出す。
 	if divider != "" && dividerAt < 0 {
 		blocks = append(
-			[]string{fmt.Sprintf("# 未読 %d 件 (このページに未読の先頭は含まれない)", ml.unread.Count)},
+			[]string{fmt.Sprintf("# 未読 %d 件 (このページに未読の先頭は含まれない)", unread.Count)},
 			blocks...,
 		)
 	}
@@ -88,8 +93,8 @@ func writeMessageList(w io.Writer, ml messageList) error {
 	return nil
 }
 
-func unreadDivider(u *traq.UnreadChannel) string {
-	if u == nil || u.OldestMessageId == "" {
+func unreadDivider(u traq.UnreadChannel) string {
+	if u.OldestMessageId == "" {
 		return ""
 	}
 	label := fmt.Sprintf("ここから未読 (%d件)", u.Count)
