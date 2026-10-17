@@ -207,7 +207,7 @@ func userLabel(u traq.User) string {
 	return label
 }
 
-// formatStampItems はスタンプを名前順に ":name: ×count" の一覧で返す。
+// formatStampItems はスタンプを API 返却順 (traQ-S_UI と同じく押された順) に ":name: ×count" の一覧で返す。
 func formatStampItems(stamps []traq.MessageStamp, names map[string]string) []string {
 	if len(stamps) == 0 {
 		return nil
@@ -220,6 +220,5 @@ func formatStampItems(stamps []traq.MessageStamp, names map[string]string) []str
 		}
 		parts = append(parts, fmt.Sprintf(":%s: ×%d", name, s.Count))
 	}
-	sort.Strings(parts)
 	return parts
 }

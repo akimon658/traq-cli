@@ -84,11 +84,51 @@ func TestWriteMessageListStamps(t *testing.T) {
 		"2026-10-17T10:00:00Z @alice id:m1",
 		"  hello",
 		"スタンプ",
-		"  :ok: ×1",
 		"  :thank: ×3",
+		"  :ok: ×1",
 		"",
 	}, "\n")
 	assert.Equal(t, want, buf.String())
+}
+
+func TestFormatStampItems(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		stamps []traq.MessageStamp
+		names  map[string]string
+		want   []string
+	}{
+		{
+			name:   "empty",
+			stamps: nil,
+			names:  map[string]string{},
+			want:   nil,
+		},
+		{
+			name: "preserves API order",
+			stamps: []traq.MessageStamp{
+				{StampId: "s2", Count: 3},
+				{StampId: "s1", Count: 1},
+			},
+			names: map[string]string{"s1": "ok", "s2": "thank"},
+			want:  []string{":thank: ×3", ":ok: ×1"},
+		},
+		{
+			name: "unknown stamp falls back to ID",
+			stamps: []traq.MessageStamp{
+				{StampId: "s9", Count: 2},
+			},
+			names: map[string]string{},
+			want:  []string{":s9: ×2"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, formatStampItems(tt.stamps, tt.names))
+		})
+	}
 }
 
 func TestWriteMessageListUnreadDivider(t *testing.T) {
