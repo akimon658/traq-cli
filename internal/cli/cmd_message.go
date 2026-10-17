@@ -68,7 +68,7 @@ func newMessageCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(cmd.OutOrStdout(), msg)
+			return writeSentMessage(cmd, e, &rt, c, ctx, msg)
 		},
 	}
 	messageCmd.AddCommand(
@@ -316,6 +316,87 @@ func parseRFC3339Flag(name, value string) (optional.Option[time.Time], error) {
 		)}
 	}
 	return optional.Some(t), nil
+}
+
+// writeSentMessage は投稿直後のメッセージ1件を list/search と同じ形式で出力する。
+func writeSentMessage(
+	cmd *cobra.Command,
+	e *Env,
+	rt *ResolvedToken,
+	c *client.Client,
+	ctx context.Context,
+	msg *traq.Message,
+) error {
+	var users []traq.User
+	err := e.apiExec(ctx, rt, func(ctx context.Context) (*http.Response, error) {
+		u, resp, apiErr := c.GetUsers(ctx)
+		users = u
+		return resp, apiErr
+	})
+	if err != nil {
+		return err
+	}
+	userByID := make(map[string]traq.User, len(users))
+	for _, u := range users {
+		userByID[u.Id] = u
+	}
+
+	var stamps []traq.StampWithThumbnail
+	err = e.apiExec(ctx, rt, func(ctx context.Context) (*http.Response, error) {
+		s, resp, apiErr := c.GetStamps(ctx)
+		stamps = s
+		return resp, apiErr
+	})
+	if err != nil {
+		return err
+	}
+	stampNames := make(map[string]string, len(stamps))
+	for _, s := range stamps {
+		stampNames[s.Id] = s.Name
+	}
+
+	// 引用・添付の解決は表示の補助なので、取得に失敗しても本体の表示は続行する。
+	quoted := map[string]traq.Message{}
+	fileMetas := map[string]traq.FileInfo{}
+	quoteIDs, fileIDs := collectAllEmbedIDs([]string{msg.Content}, e.Origin)
+	for _, id := range quoteIDs {
+		var qm *traq.Message
+		_ = e.apiExec(ctx, rt, func(ctx context.Context) (*http.Response, error) {
+			var resp *http.Response
+			var apiErr error
+			qm, resp, apiErr = c.GetMessage(ctx, id)
+			return resp, apiErr
+		})
+		if qm != nil {
+			quoted[id] = *qm
+		}
+	}
+	for _, id := range fileIDs {
+		var fi *traq.FileInfo
+		_ = e.apiExec(ctx, rt, func(ctx context.Context) (*http.Response, error) {
+			var resp *http.Response
+			var apiErr error
+			fi, resp, apiErr = c.GetFileMeta(ctx, id)
+			return resp, apiErr
+		})
+		if fi != nil {
+			fileMetas[id] = *fi
+		}
+	}
+
+	block, err := formatMessage(*msg, messageList{
+		users:  userByID,
+		stamps: stampNames,
+		loc:    time.Local,
+		origin: e.Origin,
+		quoted: quoted,
+		files:  fileMetas,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), block)
+	return err
 }
 
 func resolveChannel(

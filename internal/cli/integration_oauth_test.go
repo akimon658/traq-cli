@@ -244,10 +244,8 @@ func TestAuthLoginBrowserRead(t *testing.T) {
 	e := overrideEnv(t, ms, clientID)
 	out, err := runCLI(t, e, "users", "me")
 	require.NoError(t, err, "users me with the stored oauth token failed")
-	var me map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)
-	assert.Equal(t, "traq", asString(me["name"]))
-	assert.Equal(t, false, me["bot"])
+	assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
+	assert.Contains(t, out, "@traq")
 
 	// read スコープでは message send はスコープ不足
 	out, err = runCLI(t, e, "message", "send", "#general", "should be rejected by the scope check")
@@ -357,18 +355,17 @@ func TestAuthStatusOAuth(t *testing.T) {
 	e := overrideEnv(t, ms, clientID)
 	out, err := runCLI(t, e, "auth", "status")
 	require.NoError(t, err, "auth status failed")
-	var status map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out), &status), "output is not JSON: %s", out)
-	for key, want := range map[string]any{
-		"origin":    testTraqOrigin,
-		"source":    "keychain",
-		"method":    "oauth",
-		"scopes":    []any{auth.ScopeRead},
-		"userId":    saved.UserID,
-		"user":      "@" + saved.UserName,
-		"expiresAt": saved.ExpiresAt.Format(time.RFC3339),
+	assert.NotContains(t, out, `"origin"`, "output should be human-readable text, not JSON")
+	for _, want := range []string{
+		"origin: " + testTraqOrigin,
+		"source: keychain",
+		"method: oauth",
+		"scopes: " + auth.ScopeRead,
+		"userId: " + saved.UserID,
+		"user: @" + saved.UserName,
+		"expiresAt: " + saved.ExpiresAt.Format(time.RFC3339),
 	} {
-		assert.Equal(t, want, status[key], "status[%q]", key)
+		assert.Contains(t, out, want, "output:\n%s", out)
 	}
 }
 
@@ -436,9 +433,8 @@ func TestAuthOAuthRefresh(t *testing.T) {
 		e := overrideEnv(t, ms, clientID)
 		out, err := runCLI(t, e, "users", "me")
 		require.NoError(t, err, "users me with an expired token should refresh it")
-		var me map[string]any
-		require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)
-		assert.Equal(t, "traq", asString(me["name"]))
+		assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
+		assert.Contains(t, out, "@traq")
 
 		// 新しいトークンが保存され、refresh トークンがローテーションされているはず
 		assert.NotEqual(t, loggedIn.AccessToken, refreshed.AccessToken)
@@ -477,9 +473,8 @@ func TestAuthOAuthRefresh(t *testing.T) {
 		e := overrideEnv(t, ms, clientID)
 		out, err := runCLI(t, e, "users", "me")
 		require.NoError(t, err, "users me should refresh the token after a 401")
-		var me map[string]any
-		require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)
-		assert.Equal(t, "traq", asString(me["name"]))
+		assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
+		assert.Contains(t, out, "@traq")
 
 		assert.NotEqual(t, loggedIn.AccessToken, refreshed.AccessToken)
 		assert.NotEqual(t, loggedIn.RefreshToken, refreshed.RefreshToken)

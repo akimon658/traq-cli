@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -50,7 +51,7 @@ func newUsersCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printJSON(cmd.OutOrStdout(), me)
+			return writeMyUserDetail(cmd.OutOrStdout(), me, time.Local)
 		},
 	}
 	usersCmd.AddCommand(usersMeCmd)

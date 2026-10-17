@@ -411,10 +411,6 @@ func runStatus(cmd *cobra.Command, e *Env) error {
 	if err != nil {
 		return err
 	}
-	out := map[string]any{
-		"origin": e.Origin,
-		"source": rt.Source,
-	}
 	var meErr error
 	c := client.New(e.Origin)
 	me, meResp, err := c.GetMe(cmd.Context(), rt.Token.AccessToken)
@@ -425,29 +421,7 @@ func runStatus(cmd *cobra.Command, e *Env) error {
 		rt.Token.UserName = me.Name
 		rt.Token.UserBot = me.Bot
 	}
-	var t = rt.Token
-	switch t.Method {
-	case auth.MethodBot:
-		out["method"] = "bot"
-	case auth.MethodOAuth:
-		out["method"] = "oauth"
-		if len(t.Scope) > 0 {
-			out["scopes"] = t.Scope
-		}
-	}
-	if t.UserID != "" {
-		out["userId"] = t.UserID
-	}
-	if t.UserName != "" {
-		out["user"] = "@" + t.UserName
-	}
-	if t.UserBot {
-		out["method"] = "bot"
-	}
-	if !t.ExpiresAt.IsZero() {
-		out["expiresAt"] = t.ExpiresAt.Format(time.RFC3339)
-	}
-	if err := printJSON(cmd.OutOrStdout(), out); err != nil {
+	if err := writeAuthStatus(cmd.OutOrStdout(), e.Origin, rt.Source, *rt.Token); err != nil {
 		return err
 	}
 	if meErr != nil {

@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 	"uuid"
@@ -13,17 +13,19 @@ import (
 	"github.com/akimon658/traq-cli/internal/auth"
 )
 
+var messageIDPattern = regexp.MustCompile(`id:([0-9a-fA-F-]{36})`)
+
 func TestUsersMe(t *testing.T) {
 	t.Parallel()
 	requireTraqStack(t)
 
 	out, err := runCLI(t, botEnv(t, testTraqToken), "users", "me")
 	require.NoError(t, err, "users me failed")
-	var me map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out), &me), "output is not JSON: %s", out)
+	assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
 	apiMe := apiGetJSON(t, "/users/me")
-	assert.Equal(t, apiMe["id"], me["id"])
-	assert.Contains(t, strings.ToLower(asString(me["name"])), testBotName)
+	assert.Contains(t, out, "id:"+asString(apiMe["id"]))
+	assert.Contains(t, out, "@"+asString(apiMe["name"]))
+	assert.Contains(t, strings.ToLower(out), testBotName)
 }
 
 func TestUsersMeInvalidToken(t *testing.T) {
@@ -135,11 +137,11 @@ func TestMessageListInvalidFlags(t *testing.T) {
 
 func assertPosted(t *testing.T, out, wantContent string) {
 	t.Helper()
-	var msg map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out), &msg), "output is not JSON: %s", out)
-	id, ok := msg["id"].(string)
-	require.True(t, ok && id != "", "no message id in the output: %s", out)
-	got := apiGetJSON(t, "/messages/"+id)
+	assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
+	assert.Contains(t, out, wantContent)
+	m := messageIDPattern.FindStringSubmatch(out)
+	require.Len(t, m, 2, "no message id in the output: %s", out)
+	got := apiGetJSON(t, "/messages/"+m[1])
 	assert.Equal(t, wantContent, asString(got["content"]))
 }
 
@@ -168,17 +170,16 @@ func TestAuthStatus(t *testing.T) {
 
 	out, err := runCLI(t, botEnv(t, testTraqToken), "auth", "status")
 	require.NoError(t, err, "auth status failed")
-	var status map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out), &status), "output is not JSON: %s", out)
+	assert.NotContains(t, out, `"origin"`, "output should be human-readable text, not JSON")
 	me := apiGetJSON(t, "/users/me")
-	for key, want := range map[string]any{
-		"origin": testTraqOrigin,
-		"source": "environment",
-		"method": "bot",
-		"userId": asString(me["id"]),
-		"user":   "@" + asString(me["name"]),
+	for _, want := range []string{
+		"origin: " + testTraqOrigin,
+		"source: environment",
+		"method: bot",
+		"userId: " + asString(me["id"]),
+		"user: @" + asString(me["name"]),
 	} {
-		assert.Equal(t, want, status[key], "status[%q]", key)
+		assert.Contains(t, out, want, "output:\n%s", out)
 	}
 }
 
