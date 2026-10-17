@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -67,6 +68,69 @@ func TestMessageSendChannelNotFound(t *testing.T) {
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, exitGeneral, ec.Code)
 	assert.Contains(t, err.Error(), "channel not found")
+}
+
+func TestMessageList(t *testing.T) {
+	t.Parallel()
+	requireTraqStack(t)
+
+	e := botEnv(t, testTraqToken)
+	tag := strings.ReplaceAll(uuid.NewString(), "-", "")
+	first := "list-" + tag + "-first"
+	second := "list-" + tag + "-second"
+	for _, content := range []string{first, second} {
+		_, err := runCLI(t, e, "message", "send", "#general", content)
+		require.NoError(t, err, "message send failed")
+	}
+
+	out, err := runCLI(
+		t, e, "message", "list", "#general", "--limit", "100", "--show-unread=false",
+	)
+	require.NoError(t, err, "message list failed")
+	assert.Contains(t, out, "#general (")
+	assert.Contains(t, out, "order=desc")
+	assert.Contains(t, out, "@BOT_traq-cli", "the author name should be resolved")
+	assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
+	i1 := strings.Index(out, first)
+	i2 := strings.Index(out, second)
+	require.NotEqual(t, -1, i1, "first message not found in:\n%s", out)
+	require.NotEqual(t, -1, i2, "second message not found in:\n%s", out)
+	assert.Less(t, i1, i2, "messages should be displayed oldest first")
+}
+
+func TestMessageListLimitSummary(t *testing.T) {
+	t.Parallel()
+	requireTraqStack(t)
+
+	e := botEnv(t, testTraqToken)
+	_, err := runCLI(t, e, "message", "send", "#general", "list-limit-"+uuid.NewString())
+	require.NoError(t, err, "message send failed")
+
+	out, err := runCLI(
+		t, e, "message", "list", "#general", "--limit", "1", "--show-unread=false",
+	)
+	require.NoError(t, err, "message list failed")
+	assert.Contains(t, out, "(1件 limit=1 offset=0 order=desc)")
+}
+
+func TestMessageListInvalidFlags(t *testing.T) {
+	t.Parallel()
+
+	e := botEnv(t, "")
+	cases := map[string][]string{
+		"limit":  {"message", "list", "#general", "--limit", "0"},
+		"offset": {"message", "list", "#general", "--offset=-1"},
+		"order":  {"message", "list", "#general", "--order", "up"},
+		"since":  {"message", "list", "#general", "--since", "not-a-time"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := runCLI(t, e, args...)
+			var ec *ExitCodeError
+			require.ErrorAs(t, err, &ec)
+			assert.Equal(t, exitUsage, ec.Code)
+		})
+	}
 }
 
 func assertPosted(t *testing.T, out, wantContent string) {

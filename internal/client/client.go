@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/traPtitech/go-traq"
 )
@@ -56,4 +57,48 @@ func (c *Client) GetMe(
 	token string,
 ) (*traq.MyUserDetail, *http.Response, error) {
 	return c.API.MeAPI.GetMe(TokenContext(ctx, token)).Execute()
+}
+
+// MessageQuery はチャンネルメッセージ取得のパラメータ。
+type MessageQuery struct {
+	Limit     int32
+	Offset    int32
+	Since     *time.Time
+	Until     *time.Time
+	Inclusive bool
+	Order     string
+}
+
+// GetChannelMessages はチャンネルのメッセージを取得する。トークンは ctx から解決される。
+func (c *Client) GetChannelMessages(
+	ctx context.Context,
+	channelID string,
+	q MessageQuery,
+) ([]traq.Message, *http.Response, error) {
+	req := c.API.MessageAPI.GetMessages(ctx, channelID).
+		Limit(q.Limit).
+		Offset(q.Offset).
+		Inclusive(q.Inclusive).
+		Order(q.Order)
+	if q.Since != nil {
+		req = req.Since(*q.Since)
+	}
+	if q.Until != nil {
+		req = req.Until(*q.Until)
+	}
+	return req.Execute()
+}
+
+func (c *Client) GetUsers(ctx context.Context) ([]traq.User, *http.Response, error) {
+	return c.API.UserAPI.GetUsers(ctx).Execute()
+}
+
+func (c *Client) GetMyUnreadChannels(
+	ctx context.Context,
+) ([]traq.UnreadChannel, *http.Response, error) {
+	return c.API.MeAPI.GetMyUnreadChannels(ctx).Execute()
+}
+
+func (c *Client) GetStamps(ctx context.Context) ([]traq.StampWithThumbnail, *http.Response, error) {
+	return c.API.StampAPI.GetStamps(ctx).Execute()
 }
