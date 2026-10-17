@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -26,8 +27,8 @@ type Env struct {
 
 func NewEnv() *Env {
 	return &Env{
-		Origin:      firstNonEmpty(os.Getenv("TRAQ_ORIGIN"), auth.DefaultOrigin),
-		ClientID:    firstNonEmpty(os.Getenv("TRAQ_CLIENT_ID"), auth.DefaultClientID),
+		Origin:      cmp.Or(os.Getenv("TRAQ_ORIGIN"), auth.DefaultOrigin),
+		ClientID:    cmp.Or(os.Getenv("TRAQ_CLIENT_ID"), auth.DefaultClientID),
 		Store:       auth.NewDefaultStore(),
 		AccessToken: os.Getenv("TRAQ_ACCESS_TOKEN"),
 	}
@@ -47,22 +48,13 @@ func (e *Env) sessions() auth.SessionStore {
 	return e.Sessions
 }
 
-func firstNonEmpty(ss ...string) string {
-	for _, s := range ss {
-		if s != "" {
-			return s
-		}
-	}
-	return ""
-}
-
 type ResolvedToken struct {
 	Token  *auth.Token
 	Source string
 }
 
 func (e *Env) resolveToken(ctx context.Context) (ResolvedToken, error) {
-	t := firstNonEmpty(e.TokenOverride, e.AccessToken)
+	t := cmp.Or(e.TokenOverride, e.AccessToken)
 	if t != "" {
 		source := "environment"
 		if e.TokenOverride != "" {
