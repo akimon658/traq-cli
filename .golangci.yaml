@@ -4,11 +4,15 @@ linters:
   enable:
     - mnd
     - revive
+    - usetesting
   settings:
     revive:
       rules:
         - name: unused-parameter
           severity: error
+    usetesting:
+      context-background: true
+      context-todo: true
 
 formatters:
   enable:

@@ -1,12 +1,10 @@
 package auth
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestNewPKCE(t *testing.T) {
@@ -81,7 +79,7 @@ func TestCallbackServer(t *testing.T) {
 		if _, err := httpGet(redirectURI + "?code=xyz&state=" + pk.State); err != nil {
 			t.Fatal(err)
 		}
-		code, err := cb.Wait(contextWithTimeout(t, time.Second))
+		code, err := cb.Wait(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +101,7 @@ func TestCallbackServer(t *testing.T) {
 		if _, err := httpGet(cb.RedirectURI() + "?code=xyz&state=wrong"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cb.Wait(contextWithTimeout(t, time.Second)); err == nil {
+		if _, err := cb.Wait(t.Context()); err == nil {
 			t.Error("state mismatch should be an error")
 		}
 	})
@@ -123,18 +121,11 @@ func TestCallbackServer(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		_, err = cb.Wait(contextWithTimeout(t, time.Second))
+		_, err = cb.Wait(t.Context())
 		if err == nil {
 			t.Error("error parameter should be an error")
 		}
 	})
-}
-
-func contextWithTimeout(t *testing.T, d time.Duration) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), d)
-	t.Cleanup(cancel)
-	return ctx
 }
 
 func httpGet(url string) (int, error) {
