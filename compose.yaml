@@ -5,6 +5,8 @@ services:
       TRAQ_ALLOWSIGNUP: "true"
       TRAQ_MARIADB_HOST: mariadb
       TRAQ_STORAGE_LOCAL_DIR: /app/storage
+      # OAuth トークンの refresh を有効にし、統合テストで refresh フローを検証できるようにする
+      TRAQ_OAUTH2_ISREFRESHENABLED: "true"
     volumes:
       - type: volume
         source: traq_storage

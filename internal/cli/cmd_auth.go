@@ -66,7 +66,7 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 	if !browser {
 		return &ExitCodeError{exitUsage, errors.New("specify either --browser or --token <TOKEN>")}
 	}
-	return loginWithBrowser(e, scopeFlag)
+	return login(e, scopeFlag, openBrowser)
 }
 
 func loginWithToken(e *Env, value string) error {
@@ -109,8 +109,11 @@ func loginWithToken(e *Env, value string) error {
 	return nil
 }
 
-func loginWithBrowser(e *Env, scopeFlag string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), auth.LoginTimeout)
+// loginTimeout はブラウザログイン全体のタイムアウト。テストから短縮できるよう変数にしている。
+var loginTimeout = auth.LoginTimeout
+
+func login(e *Env, scopeFlag string, openBrowser func(url string)) error {
+	ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
 	defer cancel()
 
 	scopes, err := auth.NormalizeScopes(auth.ParseScopes(scopeFlag))
