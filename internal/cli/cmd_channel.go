@@ -14,8 +14,9 @@ import (
 
 func newChannelCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 	channelCmd := &cobra.Command{
-		Use:   "channel",
-		Short: "チャンネル操作サブコマンド",
+		Use:     "channel",
+		Aliases: []string{"channels"},
+		Short:   "チャンネル操作サブコマンド",
 	}
 	channelCmd.AddCommand(newChannelUnreadCmd(newEnv, flags))
 	return channelCmd

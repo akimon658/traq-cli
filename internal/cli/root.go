@@ -77,7 +77,7 @@ func newRootCmd(newEnv func() *Env) *cobra.Command {
 	})
 	rootCmd.AddCommand(
 		newAuthCmd(newEnv, flags),
-		newUsersCmd(newEnv, flags),
+		newUserCmd(newEnv, flags),
 		newChannelCmd(newEnv, flags),
 		newMessageCmd(newEnv, flags),
 	)

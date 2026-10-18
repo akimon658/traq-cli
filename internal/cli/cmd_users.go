@@ -13,12 +13,13 @@ import (
 	"github.com/akimon658/traq-cli/internal/client"
 )
 
-func newUsersCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
-	usersCmd := &cobra.Command{
-		Use:   "users",
-		Short: "ユーザー操作サブコマンド",
+func newUserCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
+	userCmd := &cobra.Command{
+		Use:     "user",
+		Aliases: []string{"users"},
+		Short:   "ユーザー操作サブコマンド",
 	}
-	usersMeCmd := &cobra.Command{
+	userMeCmd := &cobra.Command{
 		Use:   "me",
 		Short: "自分のユーザー詳細を取得する",
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -54,6 +55,6 @@ func newUsersCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 			return writeMyUserDetail(cmd.OutOrStdout(), me, time.Local)
 		},
 	}
-	usersCmd.AddCommand(usersMeCmd)
-	return usersCmd
+	userCmd.AddCommand(userMeCmd)
+	return userCmd
 }
