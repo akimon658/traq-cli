@@ -193,6 +193,90 @@ func TestWriteMessageListUnreadNotInPage(t *testing.T) {
 	assert.Contains(t, buf.String(), "# 未読 3 件 (このページに未読の先頭は含まれない)")
 }
 
+func TestWriteMessageListUnreadOnly(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	users := map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}}
+	msgs := []traq.Message{
+		{Id: "m1", UserId: "u1", Content: "unread-1", CreatedAt: base, UpdatedAt: base},
+		{
+			Id:        "m2",
+			UserId:    "u1",
+			Content:   "unread-2",
+			CreatedAt: base.Add(time.Minute),
+			UpdatedAt: base.Add(time.Minute),
+		},
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, writeMessageList(&buf, messageList{
+		label:  "#general",
+		limit:  10,
+		order:  "desc",
+		msgs:   msgs,
+		users:  users,
+		stamps: map[string]string{},
+		loc:    time.UTC,
+		unread: optional.Some(traq.UnreadChannel{
+			ChannelId:       "c1",
+			Count:           7,
+			Noticeable:      true,
+			OldestMessageId: "m1",
+		}),
+		unreadOnly: true,
+	}))
+
+	out := buf.String()
+	assert.Contains(t, out, "#general (未読7件中 2件 limit=10 offset=0 order=desc)")
+	assert.NotContains(t, out, "ここから未読", "the divider should be suppressed in unread-only mode")
+	assert.NotContains(t, out, "このページに未読の先頭は含まれない")
+	i1 := strings.Index(out, "id:m1")
+	i2 := strings.Index(out, "id:m2")
+	require.NotEqual(t, -1, i1)
+	require.NotEqual(t, -1, i2)
+	assert.Less(t, i1, i2, "messages should be displayed oldest first")
+}
+
+func TestWriteMessageListUnreadOnlyPartial(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	var buf bytes.Buffer
+	require.NoError(t, writeMessageList(&buf, messageList{
+		label: "#general",
+		limit: 2,
+		order: "desc",
+		msgs: []traq.Message{
+			{Id: "m1", UserId: "u1", Content: "hi", CreatedAt: base, UpdatedAt: base},
+		},
+		users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+		stamps: map[string]string{},
+		loc:    time.UTC,
+		unread: optional.Some(traq.UnreadChannel{
+			ChannelId:       "c1",
+			Count:           5,
+			OldestMessageId: "m9",
+		}),
+		unreadOnly: true,
+	}))
+	assert.Contains(t, buf.String(), "#general (未読5件中 1件 limit=2 offset=0 order=desc)")
+}
+
+func TestWriteMessageListUnreadOnlyNoUnread(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	require.NoError(t, writeMessageList(&buf, messageList{
+		label:      "#general",
+		limit:      10,
+		order:      "desc",
+		msgs:       nil,
+		users:      map[string]traq.User{},
+		stamps:     map[string]string{},
+		loc:        time.UTC,
+		unreadOnly: true,
+	}))
+	assert.Equal(t, "#general (未読0件)\n\n", buf.String())
+}
+
 func TestWriteMessageListUserNotFound(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)

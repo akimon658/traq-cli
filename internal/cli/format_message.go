@@ -21,6 +21,9 @@ type messageList struct {
 	stamps map[string]string
 	loc    *time.Location
 	unread optional.Option[traq.UnreadChannel]
+	// unreadOnly が true なら未読メッセージのみを表示するモード。
+	// unread が None のときは未読0件として出力する。
+	unreadOnly bool
 	// totalHits が Some なら検索結果として表示する。
 	totalHits optional.Option[int64]
 	sort      string
@@ -51,6 +54,17 @@ func writeMessageList(w io.Writer, ml messageList) error {
 		); err != nil {
 			return err
 		}
+	} else if ml.unreadOnly {
+		if unread, uerr := ml.unread.Take(); uerr == nil {
+			if _, err := fmt.Fprintf(
+				w, "%s (未読%d件中 %d件 limit=%d offset=%d order=%s)\n\n",
+				ml.label, unread.Count, len(msgs), ml.limit, ml.offset, ml.order,
+			); err != nil {
+				return err
+			}
+		} else if _, err := fmt.Fprintf(w, "%s (未読0件)\n\n", ml.label); err != nil {
+			return err
+		}
 	} else if _, err := fmt.Fprintf(
 		w, "%s (%d件 limit=%d offset=%d order=%s)\n\n",
 		ml.label, len(msgs), ml.limit, ml.offset, ml.order,
@@ -60,7 +74,7 @@ func writeMessageList(w io.Writer, ml messageList) error {
 
 	unread, uerr := ml.unread.Take()
 	divider := ""
-	if uerr == nil {
+	if uerr == nil && !ml.unreadOnly {
 		divider = unreadDivider(unread)
 	}
 	dividerAt := -1
