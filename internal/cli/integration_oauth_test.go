@@ -12,11 +12,14 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/moznion/go-optional"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/traPtitech/go-traq"
 	"go.uber.org/mock/gomock"
 
 	"github.com/akimon658/traq-cli/internal/auth"
+	"github.com/akimon658/traq-cli/internal/client"
 )
 
 // noRedirectClient はリダイレクトを追従しない HTTP クライアント。
@@ -525,94 +528,61 @@ func apiMeStatus(t *testing.T, token string) int {
 	return resp.StatusCode
 }
 
+// traqAPIClient はテストから traQ API を直接叩くための go-traq クライアントを返す。
+// sess が Some の場合は管理者セッションのクッキーを全リクエストに付与する。
+func traqAPIClient(t *testing.T, sess optional.Option[*http.Cookie]) *traq.APIClient {
+	t.Helper()
+	cfg := traq.NewConfiguration()
+	cfg.Servers = traq.ServerConfigurations{{URL: testTraqOrigin + "/api/v3"}}
+	sess.IfSome(func(ck *http.Cookie) {
+		cfg.DefaultHeader["Cookie"] = ck.Name + "=" + ck.Value
+	})
+	return traq.NewAPIClient(cfg)
+}
+
 // createChannelAsAdmin は管理者セッションでルート直下の公開チャンネルを作成し、ID を返す。
 func createChannelAsAdmin(t *testing.T, sess *http.Cookie, name string) string {
 	t.Helper()
-	body, err := json.Marshal(map[string]any{"name": name})
-	require.NoError(t, err)
-	req, err := http.NewRequestWithContext(
-		t.Context(), http.MethodPost, testTraqOrigin+"/api/v3/channels", bytes.NewReader(body),
-	)
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(sess)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, resp.StatusCode, "failed to create a channel: %s", raw)
-	var created struct {
-		ID string `json:"id"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &created))
-	require.NotEmpty(t, created.ID, "no channel id in the response: %s", raw)
-	return created.ID
+	ch, _, err := traqAPIClient(t, optional.Some(sess)).ChannelAPI.CreateChannel(t.Context()).
+		PostChannelRequest(traq.PostChannelRequest{Name: name}).
+		Execute()
+	require.NoError(t, err, "failed to create a channel")
+	require.NotEmpty(t, ch.Id, "no channel id in the response")
+	return ch.Id
 }
 
 // postMessageAsBot はテスト用 bot としてメッセージを投稿し、createdAt を返す。
 // embed=true で投稿するため、本文中の @ユーザー名 は mention 埋め込みに変換される。
 func postMessageAsBot(t *testing.T, channelID, content string) string {
 	t.Helper()
-	body, err := json.Marshal(map[string]any{"content": content, "embed": true})
-	require.NoError(t, err)
-	req, err := http.NewRequestWithContext(
-		t.Context(), http.MethodPost,
-		testTraqOrigin+"/api/v3/channels/"+channelID+"/messages",
-		bytes.NewReader(body),
-	)
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testTraqToken)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.Equal(
-		t, http.StatusCreated, resp.StatusCode, "failed to post a message as the bot: %s", raw,
-	)
-	var created struct {
-		CreatedAt string `json:"createdAt"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &created))
-	require.NotEmpty(t, created.CreatedAt, "no createdAt in the response: %s", raw)
-	return created.CreatedAt
+	msg, _, err := traqAPIClient(t, optional.None[*http.Cookie]()).MessageAPI.PostMessage(
+		client.TokenContext(t.Context(), testTraqToken), channelID,
+	).PostMessageRequest(traq.PostMessageRequest{
+		Content: content,
+		Embed:   traq.PtrBool(true),
+	}).Execute()
+	require.NoError(t, err, "failed to post a message as the bot")
+	require.False(t, msg.CreatedAt.IsZero(), "no createdAt in the response")
+	return msg.CreatedAt.Format(time.RFC3339)
 }
 
 // waitForChannelUnread は未読の生成が非同期に行われるため、
 // channelID の未読エントリが現れるまでポーリングする。
-type apiUnread struct {
-	ChannelId string `json:"channelId"`
-	Count     int32  `json:"count"`
-	Notice    bool   `json:"noticeable"`
-	Since     string `json:"since"`
-}
-
-func waitForChannelUnread(t *testing.T, token, channelID string) apiUnread {
+func waitForChannelUnread(t *testing.T, token, channelID string) traq.UnreadChannel {
 	t.Helper()
+	api := traqAPIClient(t, optional.None[*http.Cookie]())
+	ctx := client.TokenContext(t.Context(), token)
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		req, err := http.NewRequestWithContext(
-			t.Context(), http.MethodGet, testTraqOrigin+"/api/v3/users/me/unread", nil,
-		)
-		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
-		raw, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-		require.Equal(t, http.StatusOK, resp.StatusCode, "failed to get unreads: %s", raw)
-		var entries []apiUnread
-		require.NoError(t, json.Unmarshal(raw, &entries))
+		entries, _, err := api.MeAPI.GetMyUnreadChannels(ctx).Execute()
+		require.NoError(t, err, "failed to get unreads")
 		for _, entry := range entries {
 			if entry.ChannelId == channelID {
 				return entry
 			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("unread not found in time: channel %s, entries: %s", channelID, raw)
+			t.Fatalf("unread not found in time: channel %s, entries: %v", channelID, entries)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
@@ -665,11 +635,9 @@ func TestMessageListUnreadOnly(t *testing.T) {
 	assert.NotContains(t, out, "ここから未読", "the divider should be suppressed in unread-only mode")
 
 	// --since との交差では新しい方を採用する: 未読の最古日時より後を指定すれば表示されない
-	since, err := time.Parse(time.RFC3339, unread.Since)
-	require.NoError(t, err, "failed to parse unread since: %s", unread.Since)
 	out, err = runCLI(
 		t, e, "message", "list", chID,
-		"--unread-only", "--since", since.Add(time.Second).Format(time.RFC3339),
+		"--unread-only", "--since", unread.Since.Add(time.Second).Format(time.RFC3339),
 	)
 	require.NoError(t, err, "message list unread-only with --since failed: %s", out)
 	assert.Contains(t, out, "(未読1件中 0件 limit=10 offset=0 order=desc)")
