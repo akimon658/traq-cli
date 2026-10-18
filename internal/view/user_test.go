@@ -1,4 +1,4 @@
-package cli
+package view
 
 import (
 	"bytes"
@@ -36,7 +36,7 @@ func TestWriteMyUserDetail(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeMyUserDetail(&buf, me, time.UTC))
+	require.NoError(t, WriteMyUserDetail(&buf, me, time.UTC))
 	out := buf.String()
 	assert.Contains(t, out, "@alice (Alice Smith) id:user-id")
 	assert.NotContains(t, out, `"id"`)
@@ -65,7 +65,7 @@ func TestWriteMyUserDetailBot(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeMyUserDetail(&buf, me, time.UTC))
+	require.NoError(t, WriteMyUserDetail(&buf, me, time.UTC))
 	out := buf.String()
 	assert.Contains(t, out, "@BOT_x id:bot-id [bot]")
 	assert.NotContains(t, out, "bio:")
@@ -73,7 +73,7 @@ func TestWriteMyUserDetailBot(t *testing.T) {
 
 func TestUserStateLabel(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "active", userStateLabel(traq.USERACCOUNTSTATE_active))
-	assert.Equal(t, "deactivated", userStateLabel(traq.USERACCOUNTSTATE_deactivated))
-	assert.Equal(t, "suspended", userStateLabel(traq.USERACCOUNTSTATE_suspended))
+	assert.Equal(t, "active", UserStateLabel(traq.USERACCOUNTSTATE_active))
+	assert.Equal(t, "deactivated", UserStateLabel(traq.USERACCOUNTSTATE_deactivated))
+	assert.Equal(t, "suspended", UserStateLabel(traq.USERACCOUNTSTATE_suspended))
 }

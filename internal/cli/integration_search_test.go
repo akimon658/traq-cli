@@ -8,12 +8,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/akimon658/traq-cli/internal/config"
+	"github.com/akimon658/traq-cli/internal/exit"
 )
 
 // waitForSearchHit は word で検索し、本文に needle が現れるまでポーリングする。
 // word と needle を分けるのは、Simple-Query-String-Syntax の特殊文字
 // (+-|" 等) を避けるため (クエリは英数字のみの tag、本文確認は content 全体)。
-func waitForSearchHit(t *testing.T, e *Env, word, needle string, args ...string) string {
+func waitForSearchHit(t *testing.T, e *config.Env, word, needle string, args ...string) string {
 	t.Helper()
 	var out string
 	base := append([]string{"message", "search", word}, args...)
@@ -63,16 +66,16 @@ func TestMessageSearchInAndFrom(t *testing.T) {
 	assert.Contains(t, out, content)
 	assert.Contains(t, out, " in #general")
 
-	// 存在しないチャンネルは exitGeneral
+	// 存在しないチャンネルは exit.General
 	_, err = runCLI(t, e, "message", "search", tag, "--in", "#does-not-exist")
 	require.Error(t, err)
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitGeneral, ec.Code)
+	assert.Equal(t, exit.General, ec.Code)
 
-	// 存在しないユーザーは exitUsage
+	// 存在しないユーザーは exit.Usage
 	_, err = runCLI(t, e, "message", "search", tag, "--from", "@no-such-user-xyz")
 	require.Error(t, err)
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitUsage, ec.Code)
+	assert.Equal(t, exit.Usage, ec.Code)
 }

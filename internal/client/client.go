@@ -60,6 +60,17 @@ func (c *Client) GetMe(
 	return c.API.MeAPI.GetMe(TokenContext(ctx, token)).Execute()
 }
 
+// PostMessage はチャンネルにメッセージを投稿する。トークンは ctx から解決される。
+func (c *Client) PostMessage(
+	ctx context.Context,
+	channelID, content string,
+) (*traq.Message, *http.Response, error) {
+	return c.API.MessageAPI.
+		PostMessage(ctx, channelID).
+		PostMessageRequest(traq.PostMessageRequest{Content: content}).
+		Execute()
+}
+
 // MessageQuery はチャンネルメッセージ取得のパラメータ。
 type MessageQuery struct {
 	Limit     int32

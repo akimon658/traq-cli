@@ -12,6 +12,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/akimon658/traq-cli/internal/auth"
+	"github.com/akimon658/traq-cli/internal/config"
+	"github.com/akimon658/traq-cli/internal/exit"
 )
 
 // authorizeURLFromOutput は traq auth login --manual の出力から認可 URL の行を取り出す。
@@ -105,7 +107,7 @@ func TestAuthLoginManualFlow(t *testing.T) {
 		mp.EXPECT().Delete().Return(true, nil).Times(1),
 	)
 
-	e := &Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms, Sessions: mp}
+	e := &config.Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms, Sessions: mp}
 	out, err := runCLI(t, e, "auth", "login", "--manual")
 	require.NoError(t, err, out)
 	assert.Contains(t, out, "traq auth complete")
@@ -146,7 +148,7 @@ func TestAuthLoginManualDenied(t *testing.T) {
 		mp.EXPECT().Save(gomock.Any()).Return("/tmp/login-session.json", nil).Times(1),
 	)
 
-	e := &Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms, Sessions: mp}
+	e := &config.Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms, Sessions: mp}
 	out, err := runCLI(t, e, "auth", "login", "--manual")
 	require.NoError(t, err, out)
 
@@ -154,9 +156,9 @@ func TestAuthLoginManualDenied(t *testing.T) {
 	out, err = runCLI(t, e, "auth", "complete", decision)
 	require.Error(t, err, out)
 	assert.Contains(t, err.Error(), "authorization was denied (access_denied)")
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitGeneral, ec.Code)
+	assert.Equal(t, exit.General, ec.Code)
 }
 
 func TestAuthLoginManualStateMismatch(t *testing.T) {
@@ -171,15 +173,15 @@ func TestAuthLoginManualStateMismatch(t *testing.T) {
 	// state 不一致ではトークンを保存しない
 	ms := auth.NewMockStore(gomock.NewController(t))
 
-	e := &Env{Store: ms, Sessions: mp}
+	e := &config.Env{Store: ms, Sessions: mp}
 	_, err := runCLI(
 		t, e, "auth", "complete",
 		"https://q.trap.jp/callback?code=abc&state=wrong",
 	)
 	require.Error(t, err)
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitGeneral, ec.Code)
+	assert.Equal(t, exit.General, ec.Code)
 	assert.Contains(t, err.Error(), "state mismatch")
 }
 
@@ -189,15 +191,15 @@ func TestAuthLoginManualNoPending(t *testing.T) {
 	mp := auth.NewMockSessionStore(gomock.NewController(t))
 	mp.EXPECT().Load(gomock.Any()).Return(auth.ManualSession{}, false, nil).Times(1)
 
-	e := &Env{Store: auth.NewMockStore(gomock.NewController(t)), Sessions: mp}
+	e := &config.Env{Store: auth.NewMockStore(gomock.NewController(t)), Sessions: mp}
 	_, err := runCLI(
 		t, e, "auth", "complete",
 		"https://q.trap.jp/callback?code=abc&state=s",
 	)
 	require.Error(t, err)
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitAuthRequired, ec.Code)
+	assert.Equal(t, exit.AuthRequired, ec.Code)
 	assert.Contains(t, err.Error(), "no pending manual login")
 }
 
@@ -206,15 +208,15 @@ func TestAuthLoginManualUsage(t *testing.T) {
 
 	t.Run("no client id", func(t *testing.T) {
 		t.Parallel()
-		e := &Env{
+		e := &config.Env{
 			Store:    auth.NewMockStore(gomock.NewController(t)),
 			Sessions: auth.NewMockSessionStore(gomock.NewController(t)),
 		}
 		_, err := runCLI(t, e, "auth", "login", "--manual")
 		require.Error(t, err)
-		var ec *ExitCodeError
+		var ec *exit.Error
 		require.ErrorAs(t, err, &ec)
-		assert.Equal(t, exitUsage, ec.Code)
+		assert.Equal(t, exit.Usage, ec.Code)
 		assert.Contains(t, err.Error(), "client ID is not configured")
 	})
 
@@ -222,9 +224,9 @@ func TestAuthLoginManualUsage(t *testing.T) {
 		t.Parallel()
 		_, err := runCLI(t, botEnv(t, ""), "auth", "login", "--browser", "--manual")
 		require.Error(t, err)
-		var ec *ExitCodeError
+		var ec *exit.Error
 		require.ErrorAs(t, err, &ec)
-		assert.Equal(t, exitUsage, ec.Code)
+		assert.Equal(t, exit.Usage, ec.Code)
 		assert.Contains(t, err.Error(), "cannot combine --browser with --manual")
 	})
 
@@ -232,9 +234,9 @@ func TestAuthLoginManualUsage(t *testing.T) {
 		t.Parallel()
 		_, err := runCLI(t, botEnv(t, ""), "auth", "login", "--manual", "--token", "t")
 		require.Error(t, err)
-		var ec *ExitCodeError
+		var ec *exit.Error
 		require.ErrorAs(t, err, &ec)
-		assert.Equal(t, exitUsage, ec.Code)
+		assert.Equal(t, exit.Usage, ec.Code)
 		assert.Contains(t, err.Error(), "cannot combine --token with --manual")
 	})
 }
@@ -242,7 +244,7 @@ func TestAuthLoginManualUsage(t *testing.T) {
 func TestAuthCompleteUsage(t *testing.T) {
 	t.Parallel()
 
-	e := &Env{
+	e := &config.Env{
 		Store:    auth.NewMockStore(gomock.NewController(t)),
 		Sessions: auth.NewMockSessionStore(gomock.NewController(t)),
 	}
@@ -259,60 +261,10 @@ func TestAuthCompleteUsage(t *testing.T) {
 			t.Parallel()
 			_, err := runCLI(t, e, "auth", "complete", tc.arg)
 			require.Error(t, err)
-			var ec *ExitCodeError
+			var ec *exit.Error
 			require.ErrorAs(t, err, &ec)
-			assert.Equal(t, exitUsage, ec.Code)
+			assert.Equal(t, exit.Usage, ec.Code)
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
-}
-
-func TestParseCallback(t *testing.T) {
-	t.Parallel()
-
-	t.Run("full URL", func(t *testing.T) {
-		t.Parallel()
-		code, state, denied, err := parseCallback(
-			"http://127.0.0.1/callback?code=c&state=s&scope=read",
-		)
-		require.NoError(t, err)
-		assert.Nil(t, denied)
-		assert.Equal(t, "c", code)
-		assert.Equal(t, "s", state)
-	})
-
-	t.Run("query string", func(t *testing.T) {
-		t.Parallel()
-		code, state, denied, err := parseCallback("code=c&state=s")
-		require.NoError(t, err)
-		assert.Nil(t, denied)
-		assert.Equal(t, "c", code)
-		assert.Equal(t, "s", state)
-	})
-
-	t.Run("leading question mark", func(t *testing.T) {
-		t.Parallel()
-		code, state, denied, err := parseCallback("?code=c")
-		require.NoError(t, err)
-		assert.Nil(t, denied)
-		assert.Equal(t, "c", code)
-		// state が無い場合は PKCE に縛られるため空で受理する
-		assert.Empty(t, state)
-	})
-
-	t.Run("denied", func(t *testing.T) {
-		t.Parallel()
-		_, _, denied, err := parseCallback(
-			"http://127.0.0.1/callback?error=access_denied&state=s",
-		)
-		require.NoError(t, err)
-		require.NotNil(t, denied)
-		assert.Contains(t, denied.Error(), "authorization was denied (access_denied)")
-
-		_, _, denied, _ = parseCallback(
-			"http://127.0.0.1/callback?error=access_denied&error_description=no",
-		)
-		require.NotNil(t, denied)
-		assert.Contains(t, denied.Error(), "access_denied: no")
-	})
 }

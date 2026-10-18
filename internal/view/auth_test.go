@@ -1,4 +1,4 @@
-package cli
+package view
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 func TestWriteAuthStatusBot(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	require.NoError(t, writeAuthStatus(&buf, "https://example.com", "environment", auth.Token{
+	require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "environment", auth.Token{
 		Method:   auth.MethodBot,
 		UserID:   "user-id",
 		UserName: "BOT_x",
@@ -34,7 +34,7 @@ func TestWriteAuthStatusOAuth(t *testing.T) {
 	t.Parallel()
 	expires := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
-	require.NoError(t, writeAuthStatus(&buf, "https://example.com", "keychain", auth.Token{
+	require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "keychain", auth.Token{
 		Method:    auth.MethodOAuth,
 		Scope:     []string{auth.ScopeRead},
 		UserID:    "user-id",
@@ -49,7 +49,7 @@ func TestWriteAuthStatusOAuth(t *testing.T) {
 
 func TestAuthStatusMethod(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "bot", authStatusMethod(&auth.Token{Method: auth.MethodBot, UserBot: true}))
-	assert.Equal(t, "oauth", authStatusMethod(&auth.Token{Method: auth.MethodOAuth}))
-	assert.Equal(t, "", authStatusMethod(&auth.Token{}))
+	assert.Equal(t, "bot", AuthStatusMethod(&auth.Token{Method: auth.MethodBot, UserBot: true}))
+	assert.Equal(t, "oauth", AuthStatusMethod(&auth.Token{Method: auth.MethodOAuth}))
+	assert.Equal(t, "", AuthStatusMethod(&auth.Token{}))
 }

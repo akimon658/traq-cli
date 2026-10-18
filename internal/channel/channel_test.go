@@ -1,7 +1,6 @@
-package cli
+package channel
 
 import (
-	"bytes"
 	"testing"
 	"time"
 
@@ -19,7 +18,7 @@ func TestBuildChannelPathMap(t *testing.T) {
 			{Id: "c1", Name: "sub", ParentId: *traq.NewNullableString(&parentID)},
 		},
 	}
-	m := buildChannelPathMap(list)
+	m := BuildPathMap(list)
 	assert.Equal(t, "#general", m["p1"])
 	assert.Equal(t, "#general/sub", m["c1"])
 }
@@ -59,32 +58,32 @@ func TestClassifyUnreads(t *testing.T) {
 	}
 	stars := map[string]bool{"c-star": true, "c-both": true}
 
-	g, err := classifyUnreads(unreads, pathMap, dmMap, userNames, subLevels, stars)
+	g, err := Classify(unreads, pathMap, dmMap, userNames, subLevels, stars)
 	require.NoError(t, err)
 
-	require.Len(t, g.dm, 1)
-	assert.Equal(t, "@alice", g.dm[0].display)
+	require.Len(t, g.DM, 1)
+	assert.Equal(t, "@alice", g.DM[0].Display)
 
-	require.Len(t, g.mention, 2)
+	require.Len(t, g.Mention, 2)
 	// グループ内は updatedAt 降順
-	assert.Equal(t, "#mention-notify", g.mention[0].display)
-	assert.Equal(t, "#mention", g.mention[1].display)
+	assert.Equal(t, "#mention-notify", g.Mention[0].Display)
+	assert.Equal(t, "#mention", g.Mention[1].Display)
 
-	require.Len(t, g.notified, 2)
-	assert.Equal(t, "#both", g.notified[0].display)
-	assert.Equal(t, "#notify", g.notified[1].display)
+	require.Len(t, g.Notified, 2)
+	assert.Equal(t, "#both", g.Notified[0].Display)
+	assert.Equal(t, "#notify", g.Notified[1].Display)
 
-	require.Len(t, g.starred, 1)
-	assert.Equal(t, "#star", g.starred[0].display)
+	require.Len(t, g.Starred, 1)
+	assert.Equal(t, "#star", g.Starred[0].Display)
 
-	require.Len(t, g.others, 1)
-	assert.Equal(t, "#other", g.others[0].display)
+	require.Len(t, g.Others, 1)
+	assert.Equal(t, "#other", g.Others[0].Display)
 }
 
 func TestClassifyUnreadsErrors(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	_, err := classifyUnreads(
+	_, err := Classify(
 		[]traq.UnreadChannel{{ChannelId: "unknown", Count: 1, UpdatedAt: base}},
 		map[string]string{},
 		map[string]string{},
@@ -99,7 +98,7 @@ func TestClassifyUnreadsErrors(t *testing.T) {
 func TestClassifyUnreadsDMUserNotFoundFallback(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	g, err := classifyUnreads(
+	g, err := Classify(
 		[]traq.UnreadChannel{{ChannelId: "dm1", Count: 1, UpdatedAt: base}},
 		map[string]string{},
 		map[string]string{"dm1": "u-missing"},
@@ -108,38 +107,26 @@ func TestClassifyUnreadsDMUserNotFoundFallback(t *testing.T) {
 		map[string]bool{},
 	)
 	require.NoError(t, err)
-	require.Len(t, g.dm, 1)
-	assert.Equal(t, "(ユーザー解決失敗 id:u-missing)", g.dm[0].display)
-	assert.NotContains(t, g.dm[0].display, "@", "fallback must not look like a user handle")
+	require.Len(t, g.DM, 1)
+	assert.Equal(t, "(ユーザー解決失敗 id:u-missing)", g.DM[0].Display)
+	assert.NotContains(t, g.DM[0].Display, "@", "fallback must not look like a user handle")
 }
 
-func TestWriteUnreadChannels(t *testing.T) {
+func TestFindByPath(t *testing.T) {
 	t.Parallel()
-	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	g := unreadGroups{
-		dm:      []unreadEntry{{channelID: "dm1", display: "@alice", count: 2, updatedAt: base}},
-		mention: []unreadEntry{{channelID: "c1", display: "#general", count: 3, updatedAt: base}},
+	parentID := "p1"
+	list := &traq.ChannelList{
+		Public: []traq.Channel{
+			{Id: "p1", Name: "general"},
+			{Id: "c1", Name: "sub", ParentId: *traq.NewNullableString(&parentID)},
+		},
 	}
-	var buf bytes.Buffer
-	require.NoError(t, writeUnreadChannels(&buf, g))
-	out := buf.String()
-	assert.Contains(t, out, "DM (1チャンネル)")
-	assert.Contains(t, out, "@alice (2件)")
-	assert.Contains(t, out, "メンション (1チャンネル)")
-	assert.Contains(t, out, "#general (3件)")
-	assert.NotContains(t, out, "通知オン")
-}
-
-func TestWriteUnreadChannelsEmpty(t *testing.T) {
-	t.Parallel()
-	var buf bytes.Buffer
-	require.NoError(t, writeUnreadChannels(&buf, unreadGroups{}))
-	assert.Contains(t, buf.String(), "未読チャンネルはありません")
-}
-
-func TestChannelUnreadRejectsArgs(t *testing.T) {
-	t.Parallel()
-	e := botEnv(t, "")
-	_, err := runCLI(t, e, "channel", "unread", "extra")
+	id, err := FindByPath(list, "general")
+	require.NoError(t, err)
+	assert.Equal(t, "p1", id)
+	id, err = FindByPath(list, "#general/sub")
+	require.NoError(t, err)
+	assert.Equal(t, "c1", id)
+	_, err = FindByPath(list, "does-not-exist")
 	require.Error(t, err)
 }

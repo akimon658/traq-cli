@@ -7,30 +7,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/akimon658/traq-cli/internal/config"
+	"github.com/akimon658/traq-cli/internal/exit"
 )
-
-const (
-	exitGeneral           = 1
-	exitUsage             = 2
-	exitAuthRequired      = 3
-	exitScopeInsufficient = 4
-)
-
-type ExitCodeError struct {
-	Code int
-	Err  error
-}
-
-func (e *ExitCodeError) Error() string {
-	if e.Err != nil {
-		return e.Err.Error()
-	}
-	return fmt.Sprintf("exit status %d", e.Code)
-}
-
-func (e *ExitCodeError) Unwrap() error {
-	return e.Err
-}
 
 // globalFlags は root の永続フラグの値を保持する。
 // コマンドツリーごとに独立させるため、パッケージ変数ではなくローカルに持つ。
@@ -41,7 +21,7 @@ type globalFlags struct {
 }
 
 // apply は明示的に指定されたフラグだけを e に反映する。
-func (f *globalFlags) apply(cmd *cobra.Command, e *Env) {
+func (f *globalFlags) apply(cmd *cobra.Command, e *config.Env) {
 	if cmd.Flags().Changed("origin") {
 		e.Origin = f.origin
 	}
@@ -55,7 +35,7 @@ func (f *globalFlags) apply(cmd *cobra.Command, e *Env) {
 
 // newRootCmd はコマンドツリーを新しく構築して返す。newEnv は各コマンド実行時に
 // 呼ばれ、テストから Env を注入できるようにするためのもの。
-func newRootCmd(newEnv func() *Env) *cobra.Command {
+func newRootCmd(newEnv func() *config.Env) *cobra.Command {
 	flags := &globalFlags{}
 	rootCmd := &cobra.Command{
 		Use:   "traq",
@@ -73,7 +53,7 @@ func newRootCmd(newEnv func() *Env) *cobra.Command {
 	rootCmd.PersistentFlags().
 		StringVar(&flags.clientID, "client-id", "", "OAuth2 クライアント ID (省略時は環境変数 TRAQ_CLIENT_ID)")
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		return &ExitCodeError{exitUsage, err}
+		return exit.UsageError(err)
 	})
 	rootCmd.AddCommand(
 		newAuthCmd(newEnv, flags),
@@ -84,20 +64,21 @@ func newRootCmd(newEnv func() *Env) *cobra.Command {
 	return rootCmd
 }
 
+// Execute は CLI を実行し、終了コードを返す。
 func Execute() int {
-	err := newRootCmd(NewEnv).Execute()
+	err := newRootCmd(config.NewEnv).Execute()
 	if err == nil {
 		return 0
 	}
-	var ec *ExitCodeError
+	var ec *exit.Error
 	if errors.As(err, &ec) {
 		fmt.Fprintln(os.Stderr, ec.Error())
 		return ec.Code
 	}
 	if strings.HasPrefix(err.Error(), "unknown command") {
 		fmt.Fprintln(os.Stderr, err)
-		return exitUsage
+		return exit.Usage
 	}
 	fmt.Fprintln(os.Stderr, err)
-	return exitGeneral
+	return exit.General
 }
