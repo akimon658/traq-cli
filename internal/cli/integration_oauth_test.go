@@ -242,7 +242,7 @@ func TestAuthLoginBrowserRead(t *testing.T) {
 
 	// 保存済みトークンで users me
 	e := overrideEnv(t, ms, clientID)
-	out, err := runCLI(t, e, "users", "me")
+	out, err := runCLI(t, e, "user", "me")
 	require.NoError(t, err, "users me with the stored oauth token failed")
 	assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
 	assert.Contains(t, out, "@traq")
@@ -431,7 +431,7 @@ func TestAuthOAuthRefresh(t *testing.T) {
 		require.NotEmpty(t, loggedIn.RefreshToken)
 
 		e := overrideEnv(t, ms, clientID)
-		out, err := runCLI(t, e, "users", "me")
+		out, err := runCLI(t, e, "user", "me")
 		require.NoError(t, err, "users me with an expired token should refresh it")
 		assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
 		assert.Contains(t, out, "@traq")
@@ -471,7 +471,7 @@ func TestAuthOAuthRefresh(t *testing.T) {
 		require.NotEmpty(t, loggedIn.RefreshToken)
 
 		e := overrideEnv(t, ms, clientID)
-		out, err := runCLI(t, e, "users", "me")
+		out, err := runCLI(t, e, "user", "me")
 		require.NoError(t, err, "users me should refresh the token after a 401")
 		assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
 		assert.Contains(t, out, "@traq")

@@ -19,7 +19,7 @@ func TestUsersMe(t *testing.T) {
 	t.Parallel()
 	requireTraqStack(t)
 
-	out, err := runCLI(t, botEnv(t, testTraqToken), "users", "me")
+	out, err := runCLI(t, botEnv(t, testTraqToken), "user", "me")
 	require.NoError(t, err, "users me failed")
 	assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
 	apiMe := apiGetJSON(t, "/users/me")
@@ -32,7 +32,7 @@ func TestUsersMeInvalidToken(t *testing.T) {
 	t.Parallel()
 	requireTraqStack(t)
 
-	_, err := runCLI(t, botEnv(t, "invalid"), "users", "me")
+	_, err := runCLI(t, botEnv(t, "invalid"), "user", "me")
 	require.Error(t, err, "expected an error for the invalid token")
 	var ec *ExitCodeError
 	require.ErrorAs(t, err, &ec)

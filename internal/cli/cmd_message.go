@@ -25,8 +25,9 @@ const (
 
 func newMessageCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 	messageCmd := &cobra.Command{
-		Use:   "message",
-		Short: "メッセージ操作サブコマンド",
+		Use:     "message",
+		Aliases: []string{"messages"},
+		Short:   "メッセージ操作サブコマンド",
 	}
 	sendMessageCmd := &cobra.Command{
 		Use:   "send <チャンネル> <本文>...",
