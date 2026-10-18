@@ -171,6 +171,24 @@ func (c *Client) GetMyUnreadChannels(
 	return c.API.MeAPI.GetMyUnreadChannels(ctx).Execute()
 }
 
+func (c *Client) GetChannels(
+	ctx context.Context, includeDm bool,
+) (*traq.ChannelList, *http.Response, error) {
+	return c.API.ChannelAPI.GetChannels(ctx).IncludeDm(includeDm).Execute()
+}
+
+func (c *Client) GetMyChannelSubscriptions(
+	ctx context.Context,
+) ([]traq.UserSubscribeState, *http.Response, error) {
+	return c.API.MeAPI.GetMyChannelSubscriptions(ctx).Execute()
+}
+
+func (c *Client) GetMyStars(
+	ctx context.Context,
+) ([]string, *http.Response, error) {
+	return c.API.MeAPI.GetMyStars(ctx).Execute()
+}
+
 func (c *Client) GetStamps(ctx context.Context) ([]traq.StampWithThumbnail, *http.Response, error) {
 	return c.API.StampAPI.GetStamps(ctx).Execute()
 }
