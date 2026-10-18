@@ -277,7 +277,7 @@ func TestWriteMessageListUnreadOnlyNoUnread(t *testing.T) {
 	assert.Equal(t, "#general (未読0件)\n\n", buf.String())
 }
 
-func TestWriteMessageListUserNotFound(t *testing.T) {
+func TestWriteMessageListUserNotFoundFallback(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
@@ -287,8 +287,42 @@ func TestWriteMessageListUserNotFound(t *testing.T) {
 		users:  map[string]traq.User{},
 		stamps: map[string]string{}, loc: time.UTC,
 	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "missing")
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "(ユーザー解決失敗 id:missing)")
+	assert.NotContains(
+		t,
+		buf.String(),
+		"@unknown",
+		"fallback must not collide with a real user name",
+	)
+}
+
+func TestFormatQuoteUserNotFoundFallback(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	ml := messageList{
+		users: map[string]traq.User{},
+		loc:   time.UTC,
+		quoted: map[string]traq.Message{
+			"q1": {
+				Id:        "q1",
+				UserId:    "gone",
+				Content:   "quoted text",
+				CreatedAt: base,
+				UpdatedAt: base,
+			},
+		},
+	}
+	lines := formatQuote("q1", ml)
+	out := strings.Join(lines, "\n")
+	assert.Contains(t, out, "(ユーザー解決失敗 id:gone)")
+	assert.NotContains(
+		t,
+		out,
+		"@unknown",
+		"fallback must not collide with a real user name",
+	)
+	assert.Contains(t, out, "quoted text")
 }
 
 func TestWriteMessageListLocalTimezone(t *testing.T) {

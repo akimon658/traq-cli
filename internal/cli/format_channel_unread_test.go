@@ -94,8 +94,12 @@ func TestClassifyUnreadsErrors(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "channel not found")
+}
 
-	_, err = classifyUnreads(
+func TestClassifyUnreadsDMUserNotFoundFallback(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	g, err := classifyUnreads(
 		[]traq.UnreadChannel{{ChannelId: "dm1", Count: 1, UpdatedAt: base}},
 		map[string]string{},
 		map[string]string{"dm1": "u-missing"},
@@ -103,8 +107,10 @@ func TestClassifyUnreadsErrors(t *testing.T) {
 		map[string]traq.ChannelSubscribeLevel{},
 		map[string]bool{},
 	)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "user not found")
+	require.NoError(t, err)
+	require.Len(t, g.dm, 1)
+	assert.Equal(t, "(ユーザー解決失敗 id:u-missing)", g.dm[0].display)
+	assert.NotContains(t, g.dm[0].display, "@", "fallback must not look like a user handle")
 }
 
 func TestWriteUnreadChannels(t *testing.T) {

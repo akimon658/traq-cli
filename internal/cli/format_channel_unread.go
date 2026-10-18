@@ -70,7 +70,8 @@ func buildChannelPathMap(list *traq.ChannelList) map[string]string {
 
 // classifyUnreads は未読を DM/メンション/通知オン/お気に入り/その他に分類し、
 // 各グループ内を updatedAt 降順 (同値は channelID 昇順) にソートする。
-// 公開・DMいずれにも解決できない channelID、DM相手ユーザが解決できない場合はエラーを返す。
+// 公開・DMいずれにも解決できない channelID はエラーを返す。
+// DM相手ユーザが解決できない場合 (停止済みユーザー等) は解決失敗表示で続行する。
 func classifyUnreads(
 	unreads []traq.UnreadChannel,
 	pathMap map[string]string,
@@ -83,12 +84,13 @@ func classifyUnreads(
 	for _, u := range unreads {
 		if userID, ok := dmMap[u.ChannelId]; ok {
 			name, ok := userNames[userID]
-			if !ok {
-				return unreadGroups{}, fmt.Errorf("user not found: %s", userID)
+			display := userFallbackLabel(userID)
+			if ok {
+				display = "@" + name
 			}
 			g.dm = append(g.dm, unreadEntry{
 				channelID: u.ChannelId,
-				display:   "@" + name,
+				display:   display,
 				count:     u.Count,
 				updatedAt: u.UpdatedAt,
 			})

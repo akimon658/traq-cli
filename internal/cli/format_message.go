@@ -125,15 +125,10 @@ func unreadDivider(u traq.UnreadChannel) string {
 }
 
 func formatMessage(m traq.Message, ml messageList) (string, error) {
-	user, ok := ml.users[m.UserId]
-	if !ok {
-		return "", fmt.Errorf("failed to resolve the user of message %s: %s", m.Id, m.UserId)
-	}
-
 	header := fmt.Sprintf(
 		"%s %s id:%s",
 		m.CreatedAt.In(ml.loc).Format(time.RFC3339),
-		userLabel(user),
+		userDisplay(m.UserId, ml.users),
 		m.Id,
 	)
 	if !m.UpdatedAt.Equal(m.CreatedAt) {
@@ -178,11 +173,7 @@ func formatQuote(id string, ml messageList) []string {
 	if !ok {
 		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", id)}
 	}
-	user, uok := ml.users[qm.UserId]
-	label := "@unknown"
-	if uok {
-		label = userLabel(user)
-	}
+	label := userDisplay(qm.UserId, ml.users)
 	header := fmt.Sprintf(
 		"引用 %s %s id:%s",
 		label,
@@ -219,6 +210,21 @@ func userLabel(u traq.User) string {
 		label += " (" + u.DisplayName + ")"
 	}
 	return label
+}
+
+// userDisplay はユーザーIDから表示用ラベルを返す。
+// ユーザーが解決できない場合 (停止済みユーザーが一覧に無い等) は
+// 実在しうる "@name" 形式と衝突しない取得失敗表示にフォールバックする。
+func userDisplay(id string, users map[string]traq.User) string {
+	if u, ok := users[id]; ok {
+		return userLabel(u)
+	}
+	return userFallbackLabel(id)
+}
+
+// userFallbackLabel はユーザーIDが解決できなかったときの表示を返す。
+func userFallbackLabel(id string) string {
+	return fmt.Sprintf("(ユーザー解決失敗 id:%s)", id)
 }
 
 // formatStampItems はスタンプを API 返却順 (traQ-S_UI と同じく押された順) に ":name: ×count" の一覧で返す。
