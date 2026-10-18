@@ -161,8 +161,11 @@ func (c *Client) SearchMessages(
 	return req.Execute()
 }
 
+// GetUsers は停止済み・無効化済みユーザーを含む全ユーザーを取得する。
+// include-suspended を指定しないと有効なユーザーしか返らず、
+// 停止済みユーザーの投稿を表示する際に名前解決へ失敗するため常に指定する。
 func (c *Client) GetUsers(ctx context.Context) ([]traq.User, *http.Response, error) {
-	return c.API.UserAPI.GetUsers(ctx).Execute()
+	return c.API.UserAPI.GetUsers(ctx).IncludeSuspended(true).Execute()
 }
 
 func (c *Client) GetMyUnreadChannels(

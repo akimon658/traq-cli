@@ -125,15 +125,10 @@ func unreadDivider(u traq.UnreadChannel) string {
 }
 
 func formatMessage(m traq.Message, ml messageList) (string, error) {
-	user, ok := ml.users[m.UserId]
-	if !ok {
-		return "", fmt.Errorf("failed to resolve the user of message %s: %s", m.Id, m.UserId)
-	}
-
 	header := fmt.Sprintf(
 		"%s %s id:%s",
 		m.CreatedAt.In(ml.loc).Format(time.RFC3339),
-		userLabel(user),
+		userDisplay(m.UserId, ml.users),
 		m.Id,
 	)
 	if !m.UpdatedAt.Equal(m.CreatedAt) {
@@ -178,11 +173,7 @@ func formatQuote(id string, ml messageList) []string {
 	if !ok {
 		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", id)}
 	}
-	user, uok := ml.users[qm.UserId]
-	label := "@unknown"
-	if uok {
-		label = userLabel(user)
-	}
+	label := userDisplay(qm.UserId, ml.users)
 	header := fmt.Sprintf(
 		"引用 %s %s id:%s",
 		label,
@@ -211,14 +202,6 @@ func formatFile(id string, files map[string]traq.FileInfo) string {
 		return fmt.Sprintf("(取得失敗 id:%s)", id)
 	}
 	return fmt.Sprintf("%s (%s, %d bytes, id:%s)", fi.Name, fi.Mime, fi.Size, fi.Id)
-}
-
-func userLabel(u traq.User) string {
-	label := "@" + u.Name
-	if u.DisplayName != "" && u.DisplayName != u.Name {
-		label += " (" + u.DisplayName + ")"
-	}
-	return label
 }
 
 // formatStampItems はスタンプを API 返却順 (traQ-S_UI と同じく押された順) に ":name: ×count" の一覧で返す。
