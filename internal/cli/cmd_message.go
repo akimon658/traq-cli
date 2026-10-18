@@ -89,6 +89,7 @@ func newMessageListCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 		inclusive  bool
 		order      string
 		showUnread bool
+		unreadOnly bool
 	)
 	listCmd := &cobra.Command{
 		Use:   "list <チャンネル>",
@@ -99,7 +100,13 @@ func newMessageListCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 メッセージは常に古い順 (時系列) に表示されますが、取得順は --order で指定できます。
 既定は --order desc (新しい順) のため、初期状態では最新の --limit 件を取得して表示します。
 さらに古いメッセージは --offset を進めてください (offset は取得順が基準です)。
-例: 最新10件の次に古い10件は --offset 10`,
+例: 最新10件の次に古い10件は --offset 10
+
+--unread-only を指定すると未読メッセージのみを表示します。
+取得範囲は未読の最古日時以降に限定され、--since と併用した場合は新しい方が採用されます。
+未読の境界メッセージを必ず表示に含めるため、範囲の端は常に含まれます (--inclusive は無視されます)。
+未読が無いときは「未読0件」とだけ表示して終了します。
+bot トークンでは未読が生成されないため、常に未読0件になります。`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.ExactArgs(1)(cmd, args); err != nil {
 				return &ExitCodeError{exitUsage, err}
@@ -115,6 +122,7 @@ func newMessageListCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 				inclusive:  inclusive,
 				order:      order,
 				showUnread: showUnread,
+				unreadOnly: unreadOnly,
 			})
 		},
 	}
@@ -125,6 +133,12 @@ func newMessageListCmd(newEnv func() *Env, flags *globalFlags) *cobra.Command {
 	listCmd.Flags().BoolVar(&inclusive, "inclusive", false, "時間範囲の端を含めるかどうか")
 	listCmd.Flags().StringVar(&order, "order", "desc", "取得する順序 (asc または desc)")
 	listCmd.Flags().BoolVar(&showUnread, "show-unread", true, "「ここから未読」の位置を表示する")
+	listCmd.Flags().BoolVar(
+		&unreadOnly,
+		"unread-only",
+		false,
+		"未読メッセージのみ表示する (bot トークンでは常に未読0件になる)",
+	)
 	return listCmd
 }
 
@@ -136,6 +150,7 @@ type listOptions struct {
 	inclusive  bool
 	order      string
 	showUnread bool
+	unreadOnly bool
 }
 
 func runMessageList(
@@ -179,21 +194,63 @@ func runMessageList(
 		return err
 	}
 
-	var msgs []traq.Message
-	err = e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
-		var resp *http.Response
-		msgs, resp, err = c.GetChannelMessages(ctx, channelID, client.MessageQuery{
-			Limit:     int32(opts.limit),
-			Offset:    int32(opts.offset),
-			Since:     since,
-			Until:     until,
-			Inclusive: opts.inclusive,
-			Order:     opts.order,
+	// --unread-only では未読情報が必須なので、取得に失敗したら表示せずエラーにする。
+	// 未読の境界メッセージの createdAt は unread.Since と一致するため、
+	// 範囲の端は常に含めて取得する (--inclusive は無視する)。
+	var (
+		unread             optional.Option[traq.UnreadChannel]
+		effectiveSince     = since
+		effectiveInclusive = opts.inclusive
+	)
+	if opts.unreadOnly {
+		var list []traq.UnreadChannel
+		err := e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
+			var resp *http.Response
+			var apiErr error
+			list, resp, apiErr = c.GetMyUnreadChannels(ctx)
+			return resp, apiErr
 		})
-		return resp, err
-	})
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
+		for _, u := range list {
+			if u.ChannelId != channelID {
+				continue
+			}
+			if u.Since.IsZero() {
+				return &ExitCodeError{exitGeneral, fmt.Errorf(
+					"the unread entry of %s has no since timestamp", channelID,
+				)}
+			}
+			// --unread-only と --since は範囲の交差として新しい方を採用する。
+			if s, terr := since.Take(); terr == nil && s.After(u.Since) {
+				u.Since = s
+			}
+			effectiveSince = optional.Some(u.Since)
+			effectiveInclusive = true
+			unread = optional.Some(u)
+			break
+		}
+	}
+
+	var msgs []traq.Message
+	// 未読が無い場合 (--unread-only の未読0件) はメッセージを取得せず表示のみ行う。
+	if !opts.unreadOnly || unread.IsSome() {
+		err = e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
+			var resp *http.Response
+			msgs, resp, err = c.GetChannelMessages(ctx, channelID, client.MessageQuery{
+				Limit:     int32(opts.limit),
+				Offset:    int32(opts.offset),
+				Since:     effectiveSince,
+				Until:     until,
+				Inclusive: effectiveInclusive,
+				Order:     opts.order,
+			})
+			return resp, err
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	userByID := map[string]traq.User{}
@@ -261,9 +318,9 @@ func runMessageList(
 		}
 	}
 
-	var unread optional.Option[traq.UnreadChannel]
-	if opts.showUnread {
-		// 未読情報は表示の補助なので、取得に失敗しても本体の表示は続行する。
+	// --show-unread 用の未読情報。表示の補助なので取得に失敗しても本体の表示は続行する。
+	// --unread-only 時は取得済みなのでスキップする。
+	if opts.showUnread && !opts.unreadOnly {
 		var list []traq.UnreadChannel
 		uerr := e.apiExec(ctx, &rt, func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
@@ -282,18 +339,19 @@ func runMessageList(
 	}
 
 	return writeMessageList(cmd.OutOrStdout(), messageList{
-		label:  channelLabel(target),
-		limit:  opts.limit,
-		offset: opts.offset,
-		order:  opts.order,
-		msgs:   msgs,
-		users:  userByID,
-		stamps: stampNames,
-		loc:    time.Local,
-		unread: unread,
-		origin: e.Origin,
-		quoted: quoted,
-		files:  fileMetas,
+		label:      channelLabel(target),
+		limit:      opts.limit,
+		offset:     opts.offset,
+		order:      opts.order,
+		msgs:       msgs,
+		users:      userByID,
+		stamps:     stampNames,
+		loc:        time.Local,
+		unread:     unread,
+		unreadOnly: opts.unreadOnly,
+		origin:     e.Origin,
+		quoted:     quoted,
+		files:      fileMetas,
 	})
 }
 

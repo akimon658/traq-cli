@@ -524,3 +524,153 @@ func apiMeStatus(t *testing.T, token string) int {
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return resp.StatusCode
 }
+
+// createChannelAsAdmin は管理者セッションでルート直下の公開チャンネルを作成し、ID を返す。
+func createChannelAsAdmin(t *testing.T, sess *http.Cookie, name string) string {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"name": name})
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(
+		t.Context(), http.MethodPost, testTraqOrigin+"/api/v3/channels", bytes.NewReader(body),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(sess)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode, "failed to create a channel: %s", raw)
+	var created struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &created))
+	require.NotEmpty(t, created.ID, "no channel id in the response: %s", raw)
+	return created.ID
+}
+
+// postMessageAsBot はテスト用 bot としてメッセージを投稿し、createdAt を返す。
+// embed=true で投稿するため、本文中の @ユーザー名 は mention 埋め込みに変換される。
+func postMessageAsBot(t *testing.T, channelID, content string) string {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"content": content, "embed": true})
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(
+		t.Context(), http.MethodPost,
+		testTraqOrigin+"/api/v3/channels/"+channelID+"/messages",
+		bytes.NewReader(body),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+testTraqToken)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(
+		t, http.StatusCreated, resp.StatusCode, "failed to post a message as the bot: %s", raw,
+	)
+	var created struct {
+		CreatedAt string `json:"createdAt"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &created))
+	require.NotEmpty(t, created.CreatedAt, "no createdAt in the response: %s", raw)
+	return created.CreatedAt
+}
+
+// waitForChannelUnread は未読の生成が非同期に行われるため、
+// channelID の未読エントリが現れるまでポーリングする。
+type apiUnread struct {
+	ChannelId string `json:"channelId"`
+	Count     int32  `json:"count"`
+	Notice    bool   `json:"noticeable"`
+	Since     string `json:"since"`
+}
+
+func waitForChannelUnread(t *testing.T, token, channelID string) apiUnread {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		req, err := http.NewRequestWithContext(
+			t.Context(), http.MethodGet, testTraqOrigin+"/api/v3/users/me/unread", nil,
+		)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		raw, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusOK, resp.StatusCode, "failed to get unreads: %s", raw)
+		var entries []apiUnread
+		require.NoError(t, json.Unmarshal(raw, &entries))
+		for _, entry := range entries {
+			if entry.ChannelId == channelID {
+				return entry
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("unread not found in time: channel %s, entries: %s", channelID, raw)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// TestMessageListUnreadOnly は --unread-only を人間ユーザーとして検証する。
+// 未読はメッセージ作者自身と Bot ユーザーには生成されないため、bot から
+// 人間ユーザー (admin @traq) 宛てのメンション投稿で未読を作る。
+func TestMessageListUnreadOnly(t *testing.T) {
+	t.Parallel()
+	requireTraqStack(t)
+	clientID, sess := prepareOAuth(t)
+
+	ms := auth.NewMockStore(gomock.NewController(t))
+	var saved auth.Token
+	gomock.InOrder(
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+			saved = tok
+			return "keychain", nil
+		}).Times(1),
+		// 以降、CLI を 3 回実行する
+		ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+			return saved, "keychain", true, nil
+		}).Times(3),
+	)
+	res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "approve")
+	require.NoError(t, res.sim.err, "the browser simulation failed")
+	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
+	e := overrideEnv(t, ms, clientID)
+
+	// 他テストの未読と混ざらない専用チャンネルを用意する (チャンネル名は 20 文字まで)
+	chName := "unrd-" + strings.ReplaceAll(uuid.New().String(), "-", "")[:10]
+	chID := createChannelAsAdmin(t, sess, chName)
+
+	// 投稿前は未読が無く、メッセージ取得も行われない
+	out, err := runCLI(t, e, "message", "list", chID, "--unread-only")
+	require.NoError(t, err, "message list with no unread failed: %s", out)
+	assert.Equal(t, chID+" (未読0件)", out)
+
+	// bot から管理者ユーザー (@traq) 宛てのメンションを投稿する
+	content := "@traq unread-only-" + strings.ReplaceAll(uuid.New().String(), "-", "")
+	postMessageAsBot(t, chID, content)
+	unread := waitForChannelUnread(t, saved.AccessToken, chID)
+
+	// チャンネルパスでも解決できる
+	out, err = runCLI(t, e, "message", "list", "#"+chName, "--unread-only")
+	require.NoError(t, err, "message list unread-only failed: %s", out)
+	assert.Contains(t, out, "(未読1件中 1件 limit=10 offset=0 order=desc)")
+	assert.Contains(t, out, content)
+	assert.NotContains(t, out, "ここから未読", "the divider should be suppressed in unread-only mode")
+
+	// --since との交差では新しい方を採用する: 未読の最古日時より後を指定すれば表示されない
+	since, err := time.Parse(time.RFC3339, unread.Since)
+	require.NoError(t, err, "failed to parse unread since: %s", unread.Since)
+	out, err = runCLI(
+		t, e, "message", "list", chID,
+		"--unread-only", "--since", since.Add(time.Second).Format(time.RFC3339),
+	)
+	require.NoError(t, err, "message list unread-only with --since failed: %s", out)
+	assert.Contains(t, out, "(未読1件中 0件 limit=10 offset=0 order=desc)")
+}
