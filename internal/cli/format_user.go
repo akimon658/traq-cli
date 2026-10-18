@@ -71,6 +71,29 @@ func myUserLabel(me *traq.MyUserDetail) string {
 	return label
 }
 
+func userLabel(u traq.User) string {
+	label := "@" + u.Name
+	if u.DisplayName != "" && u.DisplayName != u.Name {
+		label += " (" + u.DisplayName + ")"
+	}
+	return label
+}
+
+// userDisplay はユーザーIDから表示用ラベルを返す。
+// ユーザーが解決できない場合 (停止済みユーザーが一覧に無い等) は
+// 実在しうる "@name" 形式と衝突しない取得失敗表示にフォールバックする。
+func userDisplay(id string, users map[string]traq.User) string {
+	if u, ok := users[id]; ok {
+		return userLabel(u)
+	}
+	return userFallbackLabel(id)
+}
+
+// userFallbackLabel はユーザーIDが解決できなかったときの表示を返す。
+func userFallbackLabel(id string) string {
+	return fmt.Sprintf("(ユーザー解決失敗 id:%s)", id)
+}
+
 // userStateLabel はアカウント状態を可読名で返す。
 func userStateLabel(state traq.UserAccountState) string {
 	switch state {

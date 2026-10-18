@@ -204,29 +204,6 @@ func formatFile(id string, files map[string]traq.FileInfo) string {
 	return fmt.Sprintf("%s (%s, %d bytes, id:%s)", fi.Name, fi.Mime, fi.Size, fi.Id)
 }
 
-func userLabel(u traq.User) string {
-	label := "@" + u.Name
-	if u.DisplayName != "" && u.DisplayName != u.Name {
-		label += " (" + u.DisplayName + ")"
-	}
-	return label
-}
-
-// userDisplay はユーザーIDから表示用ラベルを返す。
-// ユーザーが解決できない場合 (停止済みユーザーが一覧に無い等) は
-// 実在しうる "@name" 形式と衝突しない取得失敗表示にフォールバックする。
-func userDisplay(id string, users map[string]traq.User) string {
-	if u, ok := users[id]; ok {
-		return userLabel(u)
-	}
-	return userFallbackLabel(id)
-}
-
-// userFallbackLabel はユーザーIDが解決できなかったときの表示を返す。
-func userFallbackLabel(id string) string {
-	return fmt.Sprintf("(ユーザー解決失敗 id:%s)", id)
-}
-
 // formatStampItems はスタンプを API 返却順 (traQ-S_UI と同じく押された順) に ":name: ×count" の一覧で返す。
 func formatStampItems(stamps []traq.MessageStamp, names map[string]string) []string {
 	if len(stamps) == 0 {
