@@ -23,9 +23,9 @@ func TestUsersMe(t *testing.T) {
 	out, err := runCLI(t, botEnv(t, testTraqToken), "user", "me")
 	require.NoError(t, err, "users me failed")
 	assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
-	apiMe := apiGetJSON(t, "/users/me")
-	assert.Contains(t, out, "id:"+asString(apiMe["id"]))
-	assert.Contains(t, out, "@"+asString(apiMe["name"]))
+	me := getMe(t, testTraqToken)
+	assert.Contains(t, out, "id:"+me.Id)
+	assert.Contains(t, out, "@"+me.Name)
 	assert.Contains(t, strings.ToLower(out), testBotName)
 }
 
@@ -142,26 +142,18 @@ func assertPosted(t *testing.T, out, wantContent string) {
 	assert.Contains(t, out, wantContent)
 	m := messageIDPattern.FindStringSubmatch(out)
 	require.Len(t, m, 2, "no message id in the output: %s", out)
-	got := apiGetJSON(t, "/messages/"+m[1])
-	assert.Equal(t, wantContent, asString(got["content"]))
+	got := getMessage(t, m[1])
+	assert.Equal(t, wantContent, got.Content)
 }
 
 func testGeneralChannelID(t *testing.T) string {
 	t.Helper()
-	list := apiGetJSON(t, "/channels")
-	pub, ok := list["public"].([]any)
-	require.True(t, ok, "unexpected channels response: %v", list)
-	for _, ch := range pub {
-		m, ok := ch.(map[string]any)
-		if !ok {
-			continue
-		}
-		name, id := asString(m["name"]), asString(m["id"])
-		if name == "general" && id != "" {
-			return id
+	for _, ch := range getChannels(t).Public {
+		if ch.Name == "general" && ch.Id != "" {
+			return ch.Id
 		}
 	}
-	require.Fail(t, "channel general not found in the response", "%v", list)
+	require.Fail(t, "channel general not found in the response")
 	return ""
 }
 
@@ -172,13 +164,13 @@ func TestAuthStatus(t *testing.T) {
 	out, err := runCLI(t, botEnv(t, testTraqToken), "auth", "status")
 	require.NoError(t, err, "auth status failed")
 	assert.NotContains(t, out, `"origin"`, "output should be human-readable text, not JSON")
-	me := apiGetJSON(t, "/users/me")
+	me := getMe(t, testTraqToken)
 	for _, want := range []string{
 		"origin: " + testTraqOrigin,
 		"source: environment",
 		"method: bot",
-		"userId: " + asString(me["id"]),
-		"user: @" + asString(me["name"]),
+		"userId: " + me.Id,
+		"user: @" + me.Name,
 	} {
 		assert.Contains(t, out, want, "output:\n%s", out)
 	}

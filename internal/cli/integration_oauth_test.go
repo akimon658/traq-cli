@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,38 +44,19 @@ func prepareOAuth(t *testing.T) (clientID string, sess *http.Cookie) {
 // createOAuthClient は管理者セッションで OAuth2 公開クライアントを登録し、client ID を返す。
 func createOAuthClient(t *testing.T, sess *http.Cookie) string {
 	t.Helper()
-	body, err := json.Marshal(map[string]any{
-		// traQ のクライアント名には 1〜32 文字の制限がある
-		"name":        "cli-" + strings.ReplaceAll(uuid.New().String(), "-", "")[:27],
-		"description": "traQ CLI integration test client",
-		"callbackUrl": "http://127.0.0.1/callback",
-		"scopes":      []string{auth.ScopeRead, auth.ScopeWrite},
-	})
-	require.NoError(t, err)
-	req, err := http.NewRequestWithContext(
-		t.Context(), http.MethodPost, testTraqOrigin+"/api/v3/clients", bytes.NewReader(body),
-	)
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(sess)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.Equal(
-		t,
-		http.StatusCreated,
-		resp.StatusCode,
-		"failed to create an OAuth client: %s",
-		raw,
-	)
-	var created struct {
-		ID string `json:"id"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &created))
-	require.NotEmpty(t, created.ID, "no client id in the response: %s", raw)
-	return created.ID
+	created, _, err := traqAPIClient(t, optional.Some(sess)).
+		Oauth2API.CreateClient(t.Context()).
+		PostClientRequest(traq.PostClientRequest{
+			// traQ のクライアント名には 1〜32 文字の制限がある
+			Name:        "cli-" + strings.ReplaceAll(uuid.New().String(), "-", "")[:27],
+			Description: "traQ CLI integration test client",
+			CallbackUrl: "http://127.0.0.1/callback",
+			Scopes:      []traq.OAuth2Scope{traq.OAUTH2SCOPE_READ, traq.OAUTH2SCOPE_WRITE},
+		}).
+		Execute()
+	require.NoError(t, err, "failed to create an OAuth client")
+	require.NotEmpty(t, created.Id, "no client id in the response")
+	return created.Id
 }
 
 // simObservations はブラウザ役の HTTP シミュレーションで観測した値を記録する。
@@ -488,6 +468,10 @@ func TestAuthOAuthRefresh(t *testing.T) {
 
 // requestNoRedirect はリダイレクトを追従せずに HTTP リクエストを送り、
 // レスポンスと body を返す。
+//
+// ブラウザの認可フローが返す 302 の Location を検証する必要があり、
+// またリダイレクト先には traq-cli 自身のコールバックサーバーも含まれるため、
+// traQ API クライアントである go-traq ではなく net/http を直接用いる。
 func requestNoRedirect(
 	t *testing.T,
 	method, reqURL string,
@@ -518,15 +502,10 @@ func requestNoRedirect(
 // apiMeStatus は指定したトークンで GET /users/me を実行し、ステータスコードを返す。
 func apiMeStatus(t *testing.T, token string) int {
 	t.Helper()
-	req, err := http.NewRequestWithContext(
-		t.Context(), http.MethodGet, testTraqOrigin+"/api/v3/users/me", nil,
-	)
-	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	_, resp, err := botAPIClient(t).MeAPI.GetMe(
+		client.TokenContext(t.Context(), token),
+	).Execute()
+	require.NotNil(t, resp, "no HTTP response: %v", err)
 	return resp.StatusCode
 }
 
@@ -534,12 +513,7 @@ func apiMeStatus(t *testing.T, token string) int {
 // sess が Some の場合は管理者セッションのクッキーを全リクエストに付与する。
 func traqAPIClient(t *testing.T, sess optional.Option[*http.Cookie]) *traq.APIClient {
 	t.Helper()
-	cfg := traq.NewConfiguration()
-	cfg.Servers = traq.ServerConfigurations{{URL: testTraqOrigin + "/api/v3"}}
-	sess.IfSome(func(ck *http.Cookie) {
-		cfg.DefaultHeader["Cookie"] = ck.Name + "=" + ck.Value
-	})
-	return traq.NewAPIClient(cfg)
+	return traqClient(testTraqOrigin, sess)
 }
 
 // createChannelAsAdmin は管理者セッションでルート直下の公開チャンネルを作成し、ID を返す。

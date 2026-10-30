@@ -101,6 +101,8 @@ func TestCallbackServer(t *testing.T) {
 	})
 }
 
+// httpGet は ListenCallback が起動するローカルコールバックサーバーへ GET する。
+// traQ API ではなく traq-cli 内の net/http サーバーが対象のため go-traq は使えない。
 func httpGet(url string) (int, error) {
 	resp, err := http.Get(url)
 	if err != nil {

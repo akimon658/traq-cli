@@ -3,23 +3,24 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/moznion/go-optional"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/compose"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/traPtitech/go-traq"
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/authflow"
+	"github.com/akimon658/traq-cli/internal/client"
 	"github.com/akimon658/traq-cli/internal/config"
 	"github.com/akimon658/traq-cli/internal/exit"
 )
@@ -99,29 +100,28 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// traqClient は traqOrigin の traQ API を叩く go-traq クライアントを返す。
+// sess が Some の場合はセッションクッキーを全リクエストに付与する。
+func traqClient(traqOrigin string, sess optional.Option[*http.Cookie]) *traq.APIClient {
+	cfg := traq.NewConfiguration()
+	cfg.Servers = traq.ServerConfigurations{{URL: traqOrigin + "/api/v3"}}
+	sess.IfSome(func(ck *http.Cookie) {
+		cfg.DefaultHeader["Cookie"] = ck.Name + "=" + ck.Value
+	})
+	return traq.NewAPIClient(cfg)
+}
+
 // adminSession は traQ に管理者 (traq/traq) でログインし、セッションクッキーを返す。
 func adminSession(traqOrigin string) (*http.Cookie, error) {
-	apiBase := traqOrigin + "/api/v3"
-
-	loginBody, err := json.Marshal(map[string]string{"name": "traq", "password": "traq"})
+	resp, err := traqClient(traqOrigin, optional.None[*http.Cookie]()).
+		AuthenticationAPI.Login(context.Background()).
+		PostLoginRequest(traq.PostLoginRequest{Name: "traq", Password: "traq"}).
+		Execute()
 	if err != nil {
 		return nil, err
 	}
-	loginResp, err := http.Post(apiBase+"/login", "application/json", bytes.NewReader(loginBody))
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = loginResp.Body.Close() }()
-	body, err := io.ReadAll(loginResp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if loginResp.StatusCode != http.StatusNoContent {
-		return nil, fmt.Errorf(
-			"login failed: status %d, body: %s", loginResp.StatusCode, string(body),
-		)
-	}
-	for _, ck := range loginResp.Cookies() {
+	defer func() { _ = resp.Body.Close() }()
+	for _, ck := range resp.Cookies() {
 		if ck.Name == "r_session" {
 			return ck, nil
 		}
@@ -136,50 +136,23 @@ func createBotToken(traqOrigin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	apiBase := traqOrigin + "/api/v3"
-
-	botBody, err := json.Marshal(map[string]string{
-		"name":        testBotName,
-		"displayName": "traQ CLI",
-		"description": "traQ CLI integration test bot",
-		"mode":        "HTTP",
-		"endpoint":    "http://localhost",
-	})
+	bot, _, err := traqClient(traqOrigin, optional.Some(session)).
+		BotAPI.CreateBot(context.Background()).
+		PostBotRequest(traq.PostBotRequest{
+			Name:        testBotName,
+			DisplayName: "traQ CLI",
+			Description: "traQ CLI integration test bot",
+			Mode:        traq.BOTMODE_HTTP,
+			Endpoint:    traq.PtrString("http://localhost"),
+		}).
+		Execute()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create a bot: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPost, apiBase+"/bots", bytes.NewReader(botBody))
-	if err != nil {
-		return "", err
+	if bot.Tokens.AccessToken == "" {
+		return "", errors.New("no access token in the response")
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(session)
-	createResp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = createResp.Body.Close() }()
-	body, err := io.ReadAll(createResp.Body)
-	if err != nil {
-		return "", err
-	}
-	if createResp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf(
-			"failed to create a bot: status %d, body: %s", createResp.StatusCode, string(body),
-		)
-	}
-	var created struct {
-		Tokens struct {
-			AccessToken string `json:"accessToken"`
-		} `json:"tokens"`
-	}
-	if err := json.Unmarshal(body, &created); err != nil {
-		return "", err
-	}
-	if created.Tokens.AccessToken == "" {
-		return "", fmt.Errorf("no access token in the response: %s", string(body))
-	}
-	return created.Tokens.AccessToken, nil
+	return bot.Tokens.AccessToken, nil
 }
 
 func runCLI(t *testing.T, e *config.Env, args ...string) (string, error) {
@@ -199,37 +172,37 @@ func botEnv(t *testing.T, token string) *config.Env {
 	return &config.Env{Origin: testTraqOrigin, AccessToken: token}
 }
 
-func apiGetJSON(t *testing.T, path string) map[string]any {
+// botAPIClient はテストから traQ API を直接叩くための go-traq クライアントを返す。
+func botAPIClient(t *testing.T) *traq.APIClient {
 	t.Helper()
-	apiMe, err := jsonGet(t, testTraqOrigin+"/api/v3"+path)
-	require.NoError(t, err, "failed to GET %s", path)
-	return apiMe
+	return traqAPIClient(t, optional.None[*http.Cookie]())
 }
 
-func jsonGet(t *testing.T, u string) (map[string]any, error) {
+func getMe(t *testing.T, token string) *traq.MyUserDetail {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+testTraqToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
-	}
-	var v map[string]any
-	if err := json.Unmarshal(body, &v); err != nil {
-		return nil, err
-	}
-	return v, nil
+	me, _, err := botAPIClient(t).MeAPI.GetMe(
+		client.TokenContext(t.Context(), token),
+	).Execute()
+	require.NoError(t, err, "failed to get the current user")
+	return me
+}
+
+func getMessage(t *testing.T, messageID string) *traq.Message {
+	t.Helper()
+	msg, _, err := botAPIClient(t).MessageAPI.GetMessage(
+		client.TokenContext(t.Context(), testTraqToken), messageID,
+	).Execute()
+	require.NoError(t, err, "failed to get message %s", messageID)
+	return msg
+}
+
+func getChannels(t *testing.T) *traq.ChannelList {
+	t.Helper()
+	list, _, err := botAPIClient(t).ChannelAPI.GetChannels(
+		client.TokenContext(t.Context(), testTraqToken),
+	).Execute()
+	require.NoError(t, err, "failed to get channels")
+	return list
 }
 
 func overrideEnv(t *testing.T, ms *auth.MockStore, clientIDs ...string) *config.Env {
@@ -246,9 +219,4 @@ func requireTraqStack(t *testing.T) {
 	if !traqStackReady {
 		t.Skip("traQ test stack is not running (try without -short)")
 	}
-}
-
-func asString(v any) string {
-	s, _ := v.(string)
-	return s
 }
