@@ -106,6 +106,7 @@ func List(
 	enrich := Enrichment{
 		Users: map[string]traq.User{}, Stamps: map[string]string{},
 		Quoted: map[string]traq.Message{}, Files: map[string]traq.FileInfo{},
+		MyGroups: map[string]struct{}{},
 	}
 	if len(msgs) > 0 {
 		enrich, err = FetchEnrichment(ctx, e, rt, c, contentsOf(msgs))

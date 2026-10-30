@@ -37,6 +37,9 @@ type MessageList struct {
 	Quoted map[string]traq.Message
 	// Files はファイルIDから取得済みメタへのマップ。取得失敗分は欠番。
 	Files map[string]traq.FileInfo
+	// SelfID と MyGroups は自分宛メンション判定用。空なら判定しない。
+	SelfID   string
+	MyGroups map[string]struct{}
 }
 
 // NewListView は list / unread-only 表示用の MessageList を作る。
@@ -53,12 +56,14 @@ func NewListView(
 	origin string,
 	quoted map[string]traq.Message,
 	files map[string]traq.FileInfo,
+	selfID string,
+	myGroups map[string]struct{},
 ) MessageList {
 	return MessageList{
 		Label: label, Limit: limit, Offset: offset, Order: order,
 		Msgs: msgs, Users: users, Stamps: stamps, Loc: loc,
 		Unread: unread, UnreadOnly: unreadOnly, Origin: origin,
-		Quoted: quoted, Files: files,
+		Quoted: quoted, Files: files, SelfID: selfID, MyGroups: myGroups,
 	}
 }
 
@@ -75,12 +80,15 @@ func NewSearchView(
 	origin string,
 	quoted map[string]traq.Message,
 	files map[string]traq.FileInfo,
+	selfID string,
+	myGroups map[string]struct{},
 ) MessageList {
 	return MessageList{
 		Label: label, Limit: limit, Offset: offset, Sort: sort,
 		TotalHits: optional.Some(totalHits),
 		Msgs:      msgs, Users: users, Stamps: stamps, Loc: loc,
 		Origin: origin, Quoted: quoted, Files: files,
+		SelfID: selfID, MyGroups: myGroups,
 	}
 }
 
@@ -93,10 +101,13 @@ func NewSingleView(
 	origin string,
 	quoted map[string]traq.Message,
 	files map[string]traq.FileInfo,
+	selfID string,
+	myGroups map[string]struct{},
 ) MessageList {
 	return MessageList{
 		Msgs: []traq.Message{msg}, Users: users, Stamps: stamps, Loc: loc,
 		Origin: origin, Quoted: quoted, Files: files,
+		SelfID: selfID, MyGroups: myGroups,
 	}
 }
 
@@ -222,8 +233,12 @@ func FormatMessage(m traq.Message, ml MessageList) (string, error) {
 		header += " [pinned]"
 	}
 
+	clean := markdown.CleanContentWithHighlight(m.Content, ml.Origin, ml.SelfID, ml.MyGroups)
+	if clean.SelfMentioned {
+		header += " [to you]"
+	}
+
 	lines := []string{header}
-	clean := markdown.CleanContent(m.Content, ml.Origin)
 	if clean.Body != "" {
 		for _, line := range strings.Split(clean.Body, "\n") {
 			if line == "" {
@@ -272,7 +287,9 @@ func FormatQuote(id string, ml MessageList) []string {
 		header += " [edited]"
 	}
 	lines := []string{header}
-	if body := markdown.RenderQuoteBody(qm.Content); body != "" {
+	if body := markdown.RenderQuoteBodyWithHighlight(
+		qm.Content, ml.SelfID, ml.MyGroups,
+	); body != "" {
 		for _, line := range strings.Split(body, "\n") {
 			if line == "" {
 				lines = append(lines, "")

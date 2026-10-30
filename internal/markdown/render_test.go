@@ -131,3 +131,62 @@ func TestRenderQuoteBodyFullDisplay(t *testing.T) {
 	got := RenderQuoteBody(b.String())
 	assert.Equal(t, b.String(), got)
 }
+
+func TestCleanContentWithHighlightDirectMention(t *testing.T) {
+	t.Parallel()
+	in := `hi !{"type":"user","raw":"@alice","id":"u1"} and !{"type":"user","raw":"@bob","id":"u2"}`
+	got := CleanContentWithHighlight(in, "", "u1", nil)
+	assert.Equal(t, "hi @alice [to you] and @bob", got.Body)
+	assert.True(t, got.SelfMentioned)
+}
+
+func TestCleanContentWithHighlightGroupMention(t *testing.T) {
+	t.Parallel()
+	groups := map[string]struct{}{"g1": {}}
+	in := `hi !{"type":"group","raw":"@team","id":"g1"} and !{"type":"group","raw":"@other","id":"g2"}`
+	got := CleanContentWithHighlight(in, "", "u1", groups)
+	assert.Equal(t, "hi @team [to you] and @other", got.Body)
+	assert.True(t, got.SelfMentioned)
+}
+
+func TestCleanContentWithHighlightNoSelfMention(t *testing.T) {
+	t.Parallel()
+	in := `hi !{"type":"user","raw":"@bob","id":"u2"} and !{"type":"channel","raw":"#general","id":"c1"}`
+	got := CleanContentWithHighlight(in, "", "u1", map[string]struct{}{"g1": {}})
+	assert.Equal(t, "hi @bob and #general", got.Body)
+	assert.False(t, got.SelfMentioned)
+}
+
+func TestCleanContentWithHighlightCodeUntouched(t *testing.T) {
+	t.Parallel()
+	embed := `!{"type":"user","raw":"@alice","id":"u1"}`
+	in := "before\n```\n" + embed + "\n```\nafter `" + embed + "`"
+	got := CleanContentWithHighlight(in, "", "u1", nil)
+	assert.Contains(t, got.Body, embed)
+	assert.NotContains(t, got.Body, selfMentionMarker)
+	assert.False(t, got.SelfMentioned)
+}
+
+func TestCleanContentWithHighlightEmptySelfIDNoMarker(t *testing.T) {
+	t.Parallel()
+	in := `hi !{"type":"user","raw":"@alice","id":"u1"}`
+	got := CleanContentWithHighlight(in, "", "", nil)
+	assert.Equal(t, "hi @alice", got.Body)
+	assert.False(t, got.SelfMentioned)
+}
+
+func TestRenderQuoteBodyWithHighlight(t *testing.T) {
+	t.Parallel()
+	groups := map[string]struct{}{"g1": {}}
+	in := `hi !{"type":"user","raw":"@alice","id":"u1"} and !{"type":"group","raw":"@team","id":"g1"} and !{"type":"user","raw":"@bob","id":"u2"}`
+	got := RenderQuoteBodyWithHighlight(in, "u1", groups)
+	assert.Equal(t, "hi @alice [to you] and @team [to you] and @bob", got)
+}
+
+func TestRenderQuoteBodyWithHighlightNestedPlaceholder(t *testing.T) {
+	t.Parallel()
+	in := `hi !{"type":"user","raw":"@alice","id":"u1"}` +
+		` !{"type":"message","raw":"q","id":"` + testQuoteID2 + `"}`
+	got := RenderQuoteBodyWithHighlight(in, "u1", nil)
+	assert.Equal(t, "hi @alice [to you] [引用メッセージ]", got)
+}

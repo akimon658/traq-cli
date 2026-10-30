@@ -85,6 +85,7 @@ func newMessageSearchCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 			return view.WriteMessageList(cmd.OutOrStdout(), view.NewSearchView(
 				res.Label, res.Limit, res.Offset, res.Sort, res.TotalHits,
 				res.Msgs, res.Users, res.Stamps, res.Loc, res.Origin, res.Quoted, res.Files,
+				res.SelfID, res.MyGroups,
 			))
 		},
 	}

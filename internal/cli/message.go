@@ -50,6 +50,7 @@ func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command
 			}
 			return view.WriteSingleMessage(cmd.OutOrStdout(), view.NewSingleView(
 				res.Msg, res.Users, res.Stamps, res.Loc, res.Origin, res.Quoted, res.Files,
+				res.SelfID, res.MyGroups,
 			))
 		},
 	}
@@ -123,6 +124,7 @@ bot トークンでは未読が生成されないため、常に未読0件にな
 				res.Label, res.Limit, res.Offset, res.Order,
 				res.Msgs, res.Users, res.Stamps, res.Loc,
 				res.Unread, res.UnreadOnly, res.Origin, res.Quoted, res.Files,
+				res.SelfID, res.MyGroups,
 			))
 		},
 	}

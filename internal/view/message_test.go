@@ -449,3 +449,84 @@ func TestWriteMessageListSearchHeader(t *testing.T) {
 	assert.Contains(t, out, "search \"foo\" (全42件中 1件 limit=10 offset=0 sort=-createdAt)")
 	assert.Contains(t, out, "hello foo")
 }
+
+func TestWriteMessageListSelfMention(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	content := `hi !{"type":"user","raw":"@alice","id":"me"}` +
+		` and !{"type":"user","raw":"@bob","id":"u2"}` +
+		` and !{"type":"group","raw":"@team","id":"g1"}` +
+		` and !{"type":"group","raw":"@other","id":"g2"}`
+	var buf bytes.Buffer
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Order: "desc",
+		Msgs: []traq.Message{{
+			Id: "m1", UserId: "u2", Content: content,
+			CreatedAt: base, UpdatedAt: base,
+		}},
+		Users: map[string]traq.User{
+			"me": {Id: "me", Name: "alice", DisplayName: "alice"},
+			"u2": {Id: "u2", Name: "bob", DisplayName: "bob"},
+		},
+		Stamps:   map[string]string{},
+		Loc:      time.UTC,
+		SelfID:   "me",
+		MyGroups: map[string]struct{}{"g1": {}},
+	}))
+	out := buf.String()
+	assert.Contains(t, out, "id:m1 [to you]")
+	assert.Contains(t, out, "hi @alice [to you] and @bob and @team [to you] and @other")
+}
+
+func TestWriteMessageListNoSelfMention(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	content := `hi !{"type":"user","raw":"@bob","id":"u2"}` +
+		` and !{"type":"group","raw":"@other","id":"g2"}`
+	var buf bytes.Buffer
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Order: "desc",
+		Msgs: []traq.Message{{
+			Id: "m1", UserId: "u2", Content: content,
+			CreatedAt: base, UpdatedAt: base,
+		}},
+		Users:    map[string]traq.User{"u2": {Id: "u2", Name: "bob", DisplayName: "bob"}},
+		Stamps:   map[string]string{},
+		Loc:      time.UTC,
+		SelfID:   "me",
+		MyGroups: map[string]struct{}{"g1": {}},
+	}))
+	out := buf.String()
+	assert.NotContains(t, out, "[to you]")
+	assert.Contains(t, out, "hi @bob and @other")
+}
+
+func TestFormatQuoteSelfMentionDoesNotLightHeader(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	content := `!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
+	quotedContent := `hi !{"type":"user","raw":"@alice","id":"me"}`
+	var buf bytes.Buffer
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Offset: 0, Order: "desc",
+		Msgs: []traq.Message{{
+			Id: "m1", UserId: "u2", Content: content,
+			CreatedAt: base, UpdatedAt: base,
+		}},
+		Users: map[string]traq.User{
+			"me": {Id: "me", Name: "alice", DisplayName: "alice"},
+			"u2": {Id: "u2", Name: "bob", DisplayName: "bob"},
+		},
+		Stamps: map[string]string{},
+		Loc:    time.UTC,
+		Quoted: map[string]traq.Message{testQuoteID1: {
+			Id: "q1", UserId: "u2", Content: quotedContent,
+			CreatedAt: base, UpdatedAt: base,
+		}},
+		SelfID: "me",
+	}))
+	out := buf.String()
+	assert.Contains(t, out, "引用 @bob 2026-10-17T10:00:00Z id:q1")
+	assert.Contains(t, out, "  hi @alice [to you]")
+	assert.NotContains(t, out, "id:m1 [to you]", "header must not light up from a quoted mention")
+}

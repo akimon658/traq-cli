@@ -44,6 +44,9 @@ type Enrichment struct {
 	Stamps map[string]string
 	Quoted map[string]traq.Message
 	Files  map[string]traq.FileInfo
+	// SelfID と MyGroups は自分宛メンション判定用。取得できなかった場合は空。
+	SelfID   string
+	MyGroups map[string]struct{}
 }
 
 // ListResult は message list の結果。
