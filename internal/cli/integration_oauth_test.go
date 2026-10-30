@@ -607,7 +607,8 @@ func TestMessageListUnreadOnly(t *testing.T) {
 	out, err = runCLI(t, e, "message", "list", "#"+chName, "--unread-only")
 	require.NoError(t, err, "message list unread-only failed: %s", out)
 	assert.Contains(t, out, "(未読1件中 1件 limit=10 offset=0 order=desc)")
-	assert.Contains(t, out, content)
+	assert.Contains(t, out, "[to you]")
+	assert.Contains(t, out, strings.Replace(content, "@traq", "@traq [to you]", 1))
 	assert.NotContains(t, out, "ここから未読", "the divider should be suppressed in unread-only mode")
 
 	// --since との交差では新しい方を採用する: 未読の最古日時より後を指定すれば表示されない

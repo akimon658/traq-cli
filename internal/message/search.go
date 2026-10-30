@@ -121,7 +121,9 @@ func Search(
 	enrich := Enrichment{
 		Users: userByID, Stamps: map[string]string{},
 		Quoted: map[string]traq.Message{}, Files: map[string]traq.FileInfo{},
+		MyGroups: map[string]struct{}{},
 	}
+	enrich.SelfID, enrich.MyGroups = fetchSelfBestEffort(ctx, e, rt, c)
 	if len(result.Hits) > 0 {
 		var stamps []traq.StampWithThumbnail
 		if err := session.Exec(ctx, e, rt, func(ctx context.Context) (*http.Response, error) {

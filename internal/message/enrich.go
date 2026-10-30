@@ -10,6 +10,7 @@ import (
 	"github.com/akimon658/traq-cli/internal/config"
 	"github.com/akimon658/traq-cli/internal/markdown"
 	"github.com/akimon658/traq-cli/internal/session"
+	"github.com/akimon658/traq-cli/internal/user"
 )
 
 // FetchEnrichment はユーザー・スタンプ・引用・添付を取得する。
@@ -22,11 +23,13 @@ func FetchEnrichment(
 	contents []string,
 ) (Enrichment, error) {
 	out := Enrichment{
-		Users:  map[string]traq.User{},
-		Stamps: map[string]string{},
-		Quoted: map[string]traq.Message{},
-		Files:  map[string]traq.FileInfo{},
+		Users:    map[string]traq.User{},
+		Stamps:   map[string]string{},
+		Quoted:   map[string]traq.Message{},
+		Files:    map[string]traq.FileInfo{},
+		MyGroups: map[string]struct{}{},
 	}
+	out.SelfID, out.MyGroups = fetchSelfBestEffort(ctx, e, rt, c)
 	var users []traq.User
 	if err := session.Exec(ctx, e, rt, func(ctx context.Context) (*http.Response, error) {
 		var resp *http.Response
@@ -88,4 +91,23 @@ func contentsOf(msgs []traq.Message) []string {
 		out = append(out, m.Content)
 	}
 	return out
+}
+
+// fetchSelfBestEffort は自分宛メンション判定用の自IDと所属グループを取得する。
+// 表示の補助情報なので、取得に失敗しても空のまま続行する。
+func fetchSelfBestEffort(
+	ctx context.Context,
+	e *config.Env,
+	rt *session.ResolvedToken,
+	c *client.Client,
+) (string, map[string]struct{}) {
+	me, err := user.FetchMe(ctx, e, rt, c)
+	if err != nil || me == nil {
+		return "", map[string]struct{}{}
+	}
+	groups := make(map[string]struct{}, len(me.Groups))
+	for _, g := range me.Groups {
+		groups[g] = struct{}{}
+	}
+	return me.Id, groups
 }

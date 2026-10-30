@@ -14,11 +14,46 @@ const urlMatchGroups = 3
 // minFenceTicks はフェンスとみなす最小バッククォート数。
 const minFenceTicks = 3
 
+// selfMentionMarker は自分宛メンションに後置する目印。
+const selfMentionMarker = " [to you]"
+
 // embedJSON は !{...} 埋め込みのペイロードに対応する。
 type embedJSON struct {
 	Type string `json:"type"`
 	Raw  string `json:"raw"`
 	ID   string `json:"id"`
+}
+
+// mentionTarget は自分宛メンション判定の条件。
+type mentionTarget struct {
+	selfID   string
+	myGroups map[string]struct{}
+	// selfMentioned が非 nil なら、自分宛メンションを検出した時点で true にする。
+	selfMentioned *bool
+}
+
+// label は user/channel/group 埋め込みの表示文字列を返す。
+// user が自分自身、または group が所属グループなら目印を後置する。
+func (t mentionTarget) label(info embedJSON) string {
+	switch info.Type {
+	case "user":
+		if t.selfID != "" && info.ID == t.selfID {
+			t.markSelfMentioned()
+			return info.Raw + selfMentionMarker
+		}
+	case "group":
+		if _, ok := t.myGroups[info.ID]; ok {
+			t.markSelfMentioned()
+			return info.Raw + selfMentionMarker
+		}
+	}
+	return info.Raw
+}
+
+func (t mentionTarget) markSelfMentioned() {
+	if t.selfMentioned != nil {
+		*t.selfMentioned = true
+	}
 }
 
 // Cleaned は本文浄化の結果。
@@ -29,6 +64,8 @@ type Cleaned struct {
 	QuoteIDs []string
 	// FileIDs は出現順・重複除去済みのファイルID。
 	FileIDs []string
+	// SelfMentioned はトップレベル本文に自分宛メンションを含むか。
+	SelfMentioned bool
 }
 
 var uuidPattern = `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`
@@ -62,6 +99,15 @@ func CollectAllEmbedIDs(contents []string, origin string) (messageIDs, fileIDs [
 // 末尾のメッセージ・ファイルURL行も本文から除去してIDだけ返す
 // (文中URLは本文に残しつつIDも返す = S_UIのカード表示相当)。
 func CleanContent(content, origin string) Cleaned {
+	return CleanContentWithHighlight(content, origin, "", nil)
+}
+
+// CleanContentWithHighlight は CleanContent に自分宛メンションの目印付与を加える。
+// selfID に一致する user、myGroups に含まれる group の埋め込みに目印を後置する。
+func CleanContentWithHighlight(
+	content, origin, selfID string,
+	myGroups map[string]struct{},
+) Cleaned {
 	lines := strings.Split(content, "\n")
 	isCode := fenceCodeLines(lines)
 
@@ -83,12 +129,14 @@ func CleanContent(content, origin string) Cleaned {
 		seenF[id] = true
 		files = append(files, id)
 	}
+	var selfMentioned bool
+	target := mentionTarget{selfID: selfID, myGroups: myGroups, selfMentioned: &selfMentioned}
 	for i, line := range lines {
 		if isCode[i] {
 			continue
 		}
 		lines[i] = mapOutsideInlineCode(line, func(s string) string {
-			return replaceJSONEmbeds(s, addQuote, addFile)
+			return replaceJSONEmbeds(s, addQuote, addFile, target)
 		})
 	}
 
@@ -120,21 +168,35 @@ func CleanContent(content, origin string) Cleaned {
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
-	return Cleaned{Body: strings.Join(lines, "\n"), QuoteIDs: quotes, FileIDs: files}
+	return Cleaned{
+		Body:          strings.Join(lines, "\n"),
+		QuoteIDs:      quotes,
+		FileIDs:       files,
+		SelfMentioned: selfMentioned,
+	}
 }
 
 // RenderQuoteBody は引用本文 (1段目) の表示用整形。
 // user/channel/group は raw に戻し、入れ子の引用・添付JSONは
 // プレースホルダに置換する (再帰取得はしない)。Markdownは維持。
 func RenderQuoteBody(content string) string {
+	return RenderQuoteBodyWithHighlight(content, "", nil)
+}
+
+// RenderQuoteBodyWithHighlight は RenderQuoteBody に自分宛メンションの目印付与を加える。
+func RenderQuoteBodyWithHighlight(
+	content, selfID string,
+	myGroups map[string]struct{},
+) string {
 	lines := strings.Split(content, "\n")
 	isCode := fenceCodeLines(lines)
+	target := mentionTarget{selfID: selfID, myGroups: myGroups}
 	for i, line := range lines {
 		if isCode[i] {
 			continue
 		}
 		lines[i] = mapOutsideInlineCode(line, func(s string) string {
-			return replaceJSONEmbeds(s, nil, nil)
+			return replaceJSONEmbeds(s, nil, nil, target)
 		})
 	}
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
@@ -152,7 +214,11 @@ func RenderQuoteBody(content string) string {
 // 置換後の message/file 位置には何も残さない (節表示に一本化)。
 // 引用本文用に addQuote/addFile が共に nil の場合は、
 // message/file をプレースホルダ ([引用メッセージ]/[添付ファイル]) に置換する。
-func replaceJSONEmbeds(s string, addQuote, addFile func(string)) string {
+func replaceJSONEmbeds(
+	s string,
+	addQuote, addFile func(string),
+	target mentionTarget,
+) string {
 	nested := addQuote == nil && addFile == nil
 	var b strings.Builder
 	i := 0
@@ -180,7 +246,7 @@ func replaceJSONEmbeds(s string, addQuote, addFile func(string)) string {
 		b.WriteString(s[i:start])
 		switch info.Type {
 		case "user", "channel", "group":
-			b.WriteString(info.Raw)
+			b.WriteString(target.label(info))
 		case "message":
 			if nested {
 				b.WriteString("[引用メッセージ]")

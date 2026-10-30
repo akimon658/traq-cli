@@ -26,7 +26,7 @@ internal/exit/         終了コードと ExitCodeError
 ```
 cli → {authflow, channel, file, message, user} → session → config → auth
 cli → view → {channel, file, message, auth, markdown}
-message → channel, markdown
+message → channel, markdown, user
 session → client, auth, exit
 ```
 
