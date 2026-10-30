@@ -2,6 +2,8 @@ package auth
 
 import (
 	"time"
+
+	"github.com/traPtitech/go-traq"
 )
 
 type Method string
@@ -47,4 +49,23 @@ func ContainsScope(scopes []string, scope string) bool {
 		}
 	}
 	return false
+}
+
+// buildTokenFromMe は /users/me の応答から保存用 Token を組み立てる。
+// bot と OAuth の種別判別を一箇所に集約するためのヘルパー。
+func buildTokenFromMe(origin, accessToken string, me *traq.MyUserDetail) Token {
+	t := Token{
+		AccessToken: accessToken,
+		Origin:      origin,
+		UserID:      me.Id,
+		UserName:    me.Name,
+		UserBot:     me.Bot,
+		IssuedAt:    time.Now(),
+	}
+	if me.Bot {
+		t.Method = MethodBot
+	} else {
+		t.Method = MethodOAuth
+	}
+	return t
 }
