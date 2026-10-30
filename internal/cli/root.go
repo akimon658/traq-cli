@@ -60,6 +60,7 @@ func newRootCmd(newEnv func() *config.Env) *cobra.Command {
 		newUserCmd(newEnv, flags),
 		newChannelCmd(newEnv, flags),
 		newMessageCmd(newEnv, flags),
+		newFileCmd(newEnv, flags),
 	)
 	return rootCmd
 }
