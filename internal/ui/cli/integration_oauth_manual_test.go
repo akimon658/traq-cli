@@ -93,7 +93,7 @@ func TestAuthLoginManualFlow(t *testing.T) {
 	gomock.InOrder(
 		mp.EXPECT().Save(gomock.Any()).DoAndReturn(func(s auth.ManualSession) (string, error) {
 			pending = s
-			return "/tmp/login-auth.json", nil
+			return "/tmp/login-session.json", nil
 		}).Times(1),
 		mp.EXPECT().Load(gomock.Any()).DoAndReturn(
 			func(time.Time) (auth.ManualSession, bool, error) {
@@ -145,7 +145,7 @@ func TestAuthLoginManualDenied(t *testing.T) {
 	mp := auth.NewMockSessionStore(ctrl)
 	gomock.InOrder(
 		// 拒否を parse した時点でエラーになるため Load / Save / Delete は呼ばれない
-		mp.EXPECT().Save(gomock.Any()).Return("/tmp/login-auth.json", nil).Times(1),
+		mp.EXPECT().Save(gomock.Any()).Return("/tmp/login-session.json", nil).Times(1),
 	)
 
 	e := &config.Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms, Sessions: mp}
