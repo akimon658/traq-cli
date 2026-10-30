@@ -1,4 +1,4 @@
-package cli
+package view
 
 import (
 	"fmt"
@@ -9,18 +9,18 @@ import (
 	"github.com/traPtitech/go-traq"
 )
 
-// writeMyUserDetail は自分のユーザー詳細を可読性の高いテキストで出力する。
-func writeMyUserDetail(w io.Writer, me *traq.MyUserDetail, loc *time.Location) error {
+// WriteMyUserDetail は自分のユーザー詳細を可読性の高いテキストで出力する。
+func WriteMyUserDetail(w io.Writer, me *traq.MyUserDetail, loc *time.Location) error {
 	if loc == nil {
 		loc = time.Local
 	}
 
-	header := fmt.Sprintf("%s id:%s", myUserLabel(me), me.Id)
+	header := fmt.Sprintf("%s id:%s", MyUserLabel(me), me.Id)
 	if me.Bot {
 		header += " [bot]"
 	}
 	lines := []string{header}
-	lines = append(lines, fmt.Sprintf("state: %s", userStateLabel(me.State)))
+	lines = append(lines, fmt.Sprintf("state: %s", UserStateLabel(me.State)))
 	if me.Bio != "" {
 		lines = append(lines, fmt.Sprintf("bio: %s", me.Bio))
 	}
@@ -62,8 +62,8 @@ func writeMyUserDetail(w io.Writer, me *traq.MyUserDetail, loc *time.Location) e
 	return err
 }
 
-// myUserLabel は MyUserDetail 用の "@name (DisplayName)" ラベルを組み立てる。
-func myUserLabel(me *traq.MyUserDetail) string {
+// MyUserLabel は MyUserDetail 用の "@name (DisplayName)" ラベルを組み立てる。
+func MyUserLabel(me *traq.MyUserDetail) string {
 	label := "@" + me.Name
 	if me.DisplayName != "" && me.DisplayName != me.Name {
 		label += " (" + me.DisplayName + ")"
@@ -71,7 +71,8 @@ func myUserLabel(me *traq.MyUserDetail) string {
 	return label
 }
 
-func userLabel(u traq.User) string {
+// UserLabel は User 用の "@name (DisplayName)" ラベルを組み立てる。
+func UserLabel(u traq.User) string {
 	label := "@" + u.Name
 	if u.DisplayName != "" && u.DisplayName != u.Name {
 		label += " (" + u.DisplayName + ")"
@@ -79,23 +80,23 @@ func userLabel(u traq.User) string {
 	return label
 }
 
-// userDisplay はユーザーIDから表示用ラベルを返す。
+// UserDisplay はユーザーIDから表示用ラベルを返す。
 // ユーザーが解決できない場合 (停止済みユーザーが一覧に無い等) は
 // 実在しうる "@name" 形式と衝突しない取得失敗表示にフォールバックする。
-func userDisplay(id string, users map[string]traq.User) string {
+func UserDisplay(id string, users map[string]traq.User) string {
 	if u, ok := users[id]; ok {
-		return userLabel(u)
+		return UserLabel(u)
 	}
-	return userFallbackLabel(id)
+	return UserFallbackLabel(id)
 }
 
-// userFallbackLabel はユーザーIDが解決できなかったときの表示を返す。
-func userFallbackLabel(id string) string {
+// UserFallbackLabel はユーザーIDが解決できなかったときの表示を返す。
+func UserFallbackLabel(id string) string {
 	return fmt.Sprintf("(ユーザー解決失敗 id:%s)", id)
 }
 
-// userStateLabel はアカウント状態を可読名で返す。
-func userStateLabel(state traq.UserAccountState) string {
+// UserStateLabel はアカウント状態を可読名で返す。
+func UserStateLabel(state traq.UserAccountState) string {
 	switch state {
 	case traq.USERACCOUNTSTATE_active:
 		return "active"

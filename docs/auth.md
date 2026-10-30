@@ -148,27 +148,13 @@ keyring (macOS Keychain など, service 名は `traq-cli`) を優先し、対応
 
 ## パッケージ構成
 
-```
-main.go
-internal/cli/          cobra + サブコマンド定義 (root, auth, API 系)
-internal/auth/         OAuth クライアント定数・browser login・token 運用・store
-internal/client/       go-traq (github.com/traPtitech/go-traq) ラッパ。origin/トークン注入
-internal/scopereq/     コマンド → 要求スコープのレジストリ
-```
-
+パッケージ全体の構成と依存方向は [`architecture.md`](./architecture.md) を参照すること。
+認証に関わる主要部品は `internal/auth/` (プリミティブ) と `internal/authflow/` (手順) に置く。
 主要依存: `spf13/cobra`, `traPtitech/go-traq`, `99designs/keyring`。PKCE とトークン交換は標準ライブラリで自前実装する。
 
 ## エラーと終了コード
 
-AI エージェントからの利用を想定し、終了コードと 1 行の機械可読な標準エラーで挙動を示す。
-
-| コード | 意味 |
-|---|---|
-| 0 | 成功 |
-| 1 | 実行時エラー (API 側エラー含む) |
-| 2 | 使い方の誤り (cobra 標準) |
-| 3 | 未認証 (`traq auth login` 実行が必要) |
-| 4 | スコープ不足 (読み取り専用トークンで書き込みコマンドを実行した等) |
+AI エージェントからの利用を想定し、終了コードと 1 行の機械可読な標準エラーで挙動を示す。終了コードの定義は [`architecture.md`](./architecture.md) に従う。
 
 ## 採用しないこと
 

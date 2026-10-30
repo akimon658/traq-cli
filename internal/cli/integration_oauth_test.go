@@ -20,6 +20,8 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/client"
+	"github.com/akimon658/traq-cli/internal/config"
+	"github.com/akimon658/traq-cli/internal/exit"
 )
 
 // noRedirectClient はリダイレクトを追従しない HTTP クライアント。
@@ -198,9 +200,9 @@ func driveOAuthLogin(
 	obs := &simObservations{}
 	var res loginResult
 	var buf bytes.Buffer
-	res.err = login(
+	res.err = runBrowserLogin(
 		t.Context(),
-		&Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms},
+		&config.Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms},
 		scopeFlag,
 		browserSim(t, sess, submit, obs),
 		&buf,
@@ -253,9 +255,9 @@ func TestAuthLoginBrowserRead(t *testing.T) {
 	// read スコープでは message send はスコープ不足
 	out, err = runCLI(t, e, "message", "send", "#general", "should be rejected by the scope check")
 	require.Error(t, err, "expected scope error, output: %s", out)
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitScopeInsufficient, ec.Code)
+	assert.Equal(t, exit.ScopeInsufficient, ec.Code)
 	assert.Contains(t, err.Error(), "does not have the 'write' scope")
 }
 

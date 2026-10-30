@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/akimon658/traq-cli/internal/auth"
+	"github.com/akimon658/traq-cli/internal/exit"
 )
 
 var messageIDPattern = regexp.MustCompile(`id:([0-9a-fA-F-]{36})`)
@@ -34,9 +35,9 @@ func TestUsersMeInvalidToken(t *testing.T) {
 
 	_, err := runCLI(t, botEnv(t, "invalid"), "user", "me")
 	require.Error(t, err, "expected an error for the invalid token")
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitAuthRequired, ec.Code)
+	assert.Equal(t, exit.AuthRequired, ec.Code)
 	assert.Contains(t, err.Error(), "the token was rejected")
 }
 
@@ -66,9 +67,9 @@ func TestMessageSendChannelNotFound(t *testing.T) {
 
 	out, err := runCLI(t, botEnv(t, testTraqToken), "message", "send", "#does-not-exist", "hello")
 	require.Error(t, err, "expected an error for the nonexistent channel, output: %s", out)
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitGeneral, ec.Code)
+	assert.Equal(t, exit.General, ec.Code)
 	assert.Contains(t, err.Error(), "channel not found")
 }
 
@@ -128,9 +129,9 @@ func TestMessageListInvalidFlags(t *testing.T) {
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := runCLI(t, e, args...)
-			var ec *ExitCodeError
+			var ec *exit.Error
 			require.ErrorAs(t, err, &ec)
-			assert.Equal(t, exitUsage, ec.Code)
+			assert.Equal(t, exit.Usage, ec.Code)
 		})
 	}
 }
@@ -188,9 +189,9 @@ func TestAuthLoginUsage(t *testing.T) {
 
 	_, err := runCLI(t, botEnv(t, ""), "auth", "login")
 	require.Error(t, err, "auth login without --browser or --token should fail")
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitUsage, ec.Code)
+	assert.Equal(t, exit.Usage, ec.Code)
 	assert.Contains(t, err.Error(), "specify either --browser, --manual or --token")
 }
 
@@ -227,9 +228,9 @@ func TestAuthLoginTokenAndLogout(t *testing.T) {
 	assert.Contains(t, out, "logged out")
 
 	_, err = runCLI(t, e, "auth", "logout")
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitAuthRequired, ec.Code)
+	assert.Equal(t, exit.AuthRequired, ec.Code)
 }
 
 func TestAuthLoginInvalidToken(t *testing.T) {
@@ -241,8 +242,8 @@ func TestAuthLoginInvalidToken(t *testing.T) {
 
 	_, err := runCLI(t, e, "auth", "login", "--token", "invalid")
 	require.Error(t, err, "expected an error for the invalid token")
-	var ec *ExitCodeError
+	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exitGeneral, ec.Code)
+	assert.Equal(t, exit.General, ec.Code)
 	assert.Contains(t, err.Error(), "the token was rejected")
 }

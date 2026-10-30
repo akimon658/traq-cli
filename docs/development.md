@@ -32,5 +32,7 @@ go test ./...
 
 `internal/cli` のテストは Testcontainers で実 traQ サーバー (compose.yaml) を自動的に起動し、
 CLI コマンドの実行結果を検証する。Docker が必要で、起動待ちなどにより完了まで1〜2分かかる。
+メッセージ検索の検証では ES の反映遅延をポーリングで吸収する。
 
-- Docker が無い環境や素早く回したい場合は `go test -short ./...` で統合テストをスキップできる。
+- Docker が無い環境や素早く回したい場合は `go test -short ./...` で統合テストをスキップできる。`-short` で回るのは `markdown` / `view` / `channel` / `message` / `session` / `authflow` の単体テストであり、実サーバーは不要である。
+- 単体と結合の住み分けは `architecture.md` に従う。

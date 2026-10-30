@@ -1,4 +1,4 @@
-package cli
+package view
 
 import (
 	"bytes"
@@ -11,6 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/traPtitech/go-traq"
+)
+
+const (
+	testQuoteID1 = "11111111-1111-1111-1111-111111111111"
+	testFileID1  = "33333333-3333-3333-3333-333333333333"
+	testOrigin   = "https://q.trap.jp"
 )
 
 func TestWriteMessageListOrderAndFormat(t *testing.T) {
@@ -35,10 +41,10 @@ func TestWriteMessageListOrderAndFormat(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeMessageList(&buf, messageList{
-		label: "#general", limit: 10, offset: 0, order: "desc",
-		msgs: msgs, users: users, loc: loc,
-		stamps: map[string]string{},
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Offset: 0, Order: "desc",
+		Msgs: msgs, Users: users, Loc: loc,
+		Stamps: map[string]string{},
 	}))
 
 	want := strings.Join([]string{
@@ -68,14 +74,14 @@ func TestWriteMessageListStamps(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeMessageList(&buf, messageList{
-		label: "#general", limit: 10, order: "desc",
-		msgs: msgs,
-		users: map[string]traq.User{
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Order: "desc",
+		Msgs: msgs,
+		Users: map[string]traq.User{
 			"u1": {Id: "u1", Name: "alice", DisplayName: "alice"},
 		},
-		stamps: map[string]string{"s1": "ok", "s2": "thank"},
-		loc:    time.UTC,
+		Stamps: map[string]string{"s1": "ok", "s2": "thank"},
+		Loc:    time.UTC,
 	}))
 
 	want := strings.Join([]string{
@@ -126,7 +132,7 @@ func TestFormatStampItems(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, formatStampItems(tt.stamps, tt.names))
+			assert.Equal(t, tt.want, FormatStampItems(tt.stamps, tt.names))
 		})
 	}
 }
@@ -147,15 +153,15 @@ func TestWriteMessageListUnreadDivider(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeMessageList(&buf, messageList{
-		label:  "#general",
-		limit:  10,
-		order:  "desc",
-		msgs:   msgs,
-		users:  users,
-		stamps: map[string]string{},
-		loc:    time.UTC,
-		unread: optional.Some(traq.UnreadChannel{
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label:  "#general",
+		Limit:  10,
+		Order:  "desc",
+		Msgs:   msgs,
+		Users:  users,
+		Stamps: map[string]string{},
+		Loc:    time.UTC,
+		Unread: optional.Some(traq.UnreadChannel{
 			ChannelId:       "c1",
 			Count:           5,
 			Noticeable:      true,
@@ -176,17 +182,17 @@ func TestWriteMessageListUnreadNotInPage(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
-	require.NoError(t, writeMessageList(&buf, messageList{
-		label: "#general",
-		limit: 10,
-		order: "desc",
-		msgs: []traq.Message{
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general",
+		Limit: 10,
+		Order: "desc",
+		Msgs: []traq.Message{
 			{Id: "m1", UserId: "u1", Content: "hi", CreatedAt: base, UpdatedAt: base},
 		},
-		users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-		stamps: map[string]string{},
-		loc:    time.UTC,
-		unread: optional.Some(
+		Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+		Stamps: map[string]string{},
+		Loc:    time.UTC,
+		Unread: optional.Some(
 			traq.UnreadChannel{ChannelId: "c1", Count: 3, OldestMessageId: "other"},
 		),
 	}))
@@ -209,21 +215,21 @@ func TestWriteMessageListUnreadOnly(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeMessageList(&buf, messageList{
-		label:  "#general",
-		limit:  10,
-		order:  "desc",
-		msgs:   msgs,
-		users:  users,
-		stamps: map[string]string{},
-		loc:    time.UTC,
-		unread: optional.Some(traq.UnreadChannel{
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label:  "#general",
+		Limit:  10,
+		Order:  "desc",
+		Msgs:   msgs,
+		Users:  users,
+		Stamps: map[string]string{},
+		Loc:    time.UTC,
+		Unread: optional.Some(traq.UnreadChannel{
 			ChannelId:       "c1",
 			Count:           7,
 			Noticeable:      true,
 			OldestMessageId: "m1",
 		}),
-		unreadOnly: true,
+		UnreadOnly: true,
 	}))
 
 	out := buf.String()
@@ -241,22 +247,22 @@ func TestWriteMessageListUnreadOnlyPartial(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
-	require.NoError(t, writeMessageList(&buf, messageList{
-		label: "#general",
-		limit: 2,
-		order: "desc",
-		msgs: []traq.Message{
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general",
+		Limit: 2,
+		Order: "desc",
+		Msgs: []traq.Message{
 			{Id: "m1", UserId: "u1", Content: "hi", CreatedAt: base, UpdatedAt: base},
 		},
-		users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-		stamps: map[string]string{},
-		loc:    time.UTC,
-		unread: optional.Some(traq.UnreadChannel{
+		Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+		Stamps: map[string]string{},
+		Loc:    time.UTC,
+		Unread: optional.Some(traq.UnreadChannel{
 			ChannelId:       "c1",
 			Count:           5,
 			OldestMessageId: "m9",
 		}),
-		unreadOnly: true,
+		UnreadOnly: true,
 	}))
 	assert.Contains(t, buf.String(), "#general (未読5件中 1件 limit=2 offset=0 order=desc)")
 }
@@ -264,15 +270,15 @@ func TestWriteMessageListUnreadOnlyPartial(t *testing.T) {
 func TestWriteMessageListUnreadOnlyNoUnread(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	require.NoError(t, writeMessageList(&buf, messageList{
-		label:      "#general",
-		limit:      10,
-		order:      "desc",
-		msgs:       nil,
-		users:      map[string]traq.User{},
-		stamps:     map[string]string{},
-		loc:        time.UTC,
-		unreadOnly: true,
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label:      "#general",
+		Limit:      10,
+		Order:      "desc",
+		Msgs:       nil,
+		Users:      map[string]traq.User{},
+		Stamps:     map[string]string{},
+		Loc:        time.UTC,
+		UnreadOnly: true,
 	}))
 	assert.Equal(t, "#general (未読0件)\n\n", buf.String())
 }
@@ -281,11 +287,11 @@ func TestWriteMessageListUserNotFoundFallback(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
-	err := writeMessageList(&buf, messageList{
-		label: "#general", limit: 10, order: "desc",
-		msgs:   []traq.Message{{Id: "m1", UserId: "missing", CreatedAt: base, UpdatedAt: base}},
-		users:  map[string]traq.User{},
-		stamps: map[string]string{}, loc: time.UTC,
+	err := WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Order: "desc",
+		Msgs:   []traq.Message{{Id: "m1", UserId: "missing", CreatedAt: base, UpdatedAt: base}},
+		Users:  map[string]traq.User{},
+		Stamps: map[string]string{}, Loc: time.UTC,
 	})
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "(ユーザー解決失敗 id:missing)")
@@ -300,10 +306,10 @@ func TestWriteMessageListUserNotFoundFallback(t *testing.T) {
 func TestFormatQuoteUserNotFoundFallback(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	ml := messageList{
-		users: map[string]traq.User{},
-		loc:   time.UTC,
-		quoted: map[string]traq.Message{
+	ml := MessageList{
+		Users: map[string]traq.User{},
+		Loc:   time.UTC,
+		Quoted: map[string]traq.Message{
 			"q1": {
 				Id:        "q1",
 				UserId:    "gone",
@@ -313,7 +319,7 @@ func TestFormatQuoteUserNotFoundFallback(t *testing.T) {
 			},
 		},
 	}
-	lines := formatQuote("q1", ml)
+	lines := FormatQuote("q1", ml)
 	out := strings.Join(lines, "\n")
 	assert.Contains(t, out, "(ユーザー解決失敗 id:gone)")
 	assert.NotContains(
@@ -330,13 +336,116 @@ func TestWriteMessageListLocalTimezone(t *testing.T) {
 	jst := time.FixedZone("JST", 9*60*60)
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
-	require.NoError(t, writeMessageList(&buf, messageList{
-		label: "#general", limit: 10, order: "desc",
-		msgs: []traq.Message{
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Order: "desc",
+		Msgs: []traq.Message{
 			{Id: "m1", UserId: "u1", Content: "hi", CreatedAt: base, UpdatedAt: base},
 		},
-		users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-		stamps: map[string]string{}, loc: jst,
+		Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+		Stamps: map[string]string{}, Loc: jst,
 	}))
 	assert.Contains(t, buf.String(), "2026-10-17T19:00:00+09:00")
+}
+
+func TestFormatMessageFullBlock(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	qtime := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
+	users := map[string]traq.User{
+		"u1": {Id: "u1", Name: "alice", DisplayName: "alice"},
+		"u2": {Id: "u2", Name: "carol", DisplayName: "Carol"},
+	}
+	content := "hi " + `!{"type":"user","raw":"@carol","id":"u2"}` + "\n" +
+		`!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
+	var buf bytes.Buffer
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Offset: 0, Order: "desc",
+		Msgs: []traq.Message{{
+			Id: "m1", UserId: "u1", Content: content,
+			CreatedAt: base, UpdatedAt: base,
+			Stamps: []traq.MessageStamp{{StampId: "s1", Count: 2}},
+		}},
+		Users:  users,
+		Stamps: map[string]string{"s1": "ok"},
+		Loc:    time.UTC,
+		Origin: testOrigin,
+		Quoted: map[string]traq.Message{testQuoteID1: {
+			Id: "m2", UserId: "u2", Content: "quoted body",
+			CreatedAt: qtime, UpdatedAt: qtime,
+		}},
+		Files: map[string]traq.FileInfo{testFileID1: {
+			Id: testFileID1, Name: "report.pdf", Mime: "application/pdf", Size: 12345,
+		}},
+	}))
+	out := buf.String()
+	assert.Contains(t, out, "2026-10-17T10:00:00Z @alice id:m1")
+	assert.Contains(t, out, "  hi @carol")
+	assert.Contains(t, out, "引用 @carol (Carol) 2026-10-16T09:00:00Z id:m2")
+	assert.Contains(t, out, "  quoted body")
+	assert.NotContains(t, out, `"type"`)
+}
+
+func TestFormatMessageQuoteFetchFailure(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	content := `!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
+	var buf bytes.Buffer
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Offset: 0, Order: "desc",
+		Msgs: []traq.Message{{
+			Id: "m1", UserId: "u1", Content: content,
+			CreatedAt: base, UpdatedAt: base,
+		}},
+		Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+		Stamps: map[string]string{},
+		Loc:    time.UTC,
+		Quoted: map[string]traq.Message{},
+		Files:  map[string]traq.FileInfo{},
+	}))
+	assert.Contains(t, buf.String(), "引用 (取得失敗 id:"+testQuoteID1+")")
+}
+
+func TestFormatMessageFileSection(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	content := "doc\n" +
+		`!{"type":"file","raw":"r","id":"` + testFileID1 + `"}`
+	var buf bytes.Buffer
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "#general", Limit: 10, Offset: 0, Order: "desc",
+		Msgs: []traq.Message{{
+			Id: "m1", UserId: "u1", Content: content,
+			CreatedAt: base, UpdatedAt: base,
+		}},
+		Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+		Stamps: map[string]string{},
+		Loc:    time.UTC,
+		Quoted: map[string]traq.Message{},
+		Files: map[string]traq.FileInfo{testFileID1: {
+			Id: testFileID1, Name: "report.pdf", Mime: "application/pdf", Size: 12345,
+		}},
+	}))
+	out := buf.String()
+	assert.Contains(t, out, "添付ファイル")
+	assert.Contains(t, out, "  report.pdf (application/pdf, 12345 bytes, id:"+testFileID1+")")
+}
+
+func TestWriteMessageListSearchHeader(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	total := int64(42)
+	var buf bytes.Buffer
+	require.NoError(t, WriteMessageList(&buf, MessageList{
+		Label: "search \"foo\"", Limit: 10, Offset: 0, Sort: "-createdAt",
+		Msgs: []traq.Message{
+			{Id: "m1", UserId: "u1", Content: "hello foo", CreatedAt: base, UpdatedAt: base},
+		},
+		Users:     map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+		Stamps:    map[string]string{},
+		Loc:       time.UTC,
+		TotalHits: optional.Some(total),
+	}))
+	out := buf.String()
+	assert.Contains(t, out, "search \"foo\" (全42件中 1件 limit=10 offset=0 sort=-createdAt)")
+	assert.Contains(t, out, "hello foo")
 }

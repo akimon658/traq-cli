@@ -1,4 +1,6 @@
-package cli
+// Package markdown はメッセージ本文の埋め込み解決と浄化を行う純粋パーサ。
+// 副作用がなく、API 呼び出しも行わない。
+package markdown
 
 import (
 	"encoding/json"
@@ -19,32 +21,32 @@ type embedJSON struct {
 	ID   string `json:"id"`
 }
 
-// cleanedContent は本文浄化の結果。
-type cleanedContent struct {
-	// body は埋め込み解決・除去後の本文 (Markdown自体は維持)。
-	body string
-	// quoteIDs は出現順・重複除去済みの引用メッセージID。
-	quoteIDs []string
-	// fileIDs は出現順・重複除去済みのファイルID。
-	fileIDs []string
+// Cleaned は本文浄化の結果。
+type Cleaned struct {
+	// Body は埋め込み解決・除去後の本文 (Markdown自体は維持)。
+	Body string
+	// QuoteIDs は出現順・重複除去済みの引用メッセージID。
+	QuoteIDs []string
+	// FileIDs は出現順・重複除去済みのファイルID。
+	FileIDs []string
 }
 
 var uuidPattern = `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`
 
-// collectAllEmbedIDs は複数メッセージの本文から引用・添付IDを集める。
+// CollectAllEmbedIDs は複数メッセージの本文から引用・添付IDを集める。
 // 一括fetch前の収集用。順序はメッセージ順・出現順、重複除去済み。
-func collectAllEmbedIDs(contents []string, origin string) (messageIDs, fileIDs []string) {
+func CollectAllEmbedIDs(contents []string, origin string) (messageIDs, fileIDs []string) {
 	seenMsg := map[string]bool{}
 	seenFile := map[string]bool{}
 	for _, c := range contents {
-		cc := cleanContent(c, origin)
-		for _, id := range cc.quoteIDs {
+		cc := CleanContent(c, origin)
+		for _, id := range cc.QuoteIDs {
 			if !seenMsg[id] {
 				seenMsg[id] = true
 				messageIDs = append(messageIDs, id)
 			}
 		}
-		for _, id := range cc.fileIDs {
+		for _, id := range cc.FileIDs {
 			if !seenFile[id] {
 				seenFile[id] = true
 				fileIDs = append(fileIDs, id)
@@ -54,12 +56,12 @@ func collectAllEmbedIDs(contents []string, origin string) (messageIDs, fileIDs [
 	return messageIDs, fileIDs
 }
 
-// cleanContent は本文から埋め込みを抽出し、表示用本文を返す。
+// CleanContent は本文から埋め込みを抽出し、表示用本文を返す。
 // user/channel/group のJSON埋め込みは raw に戻し、
 // message/file のJSON埋め込みは本文から除去してIDだけ返す。
 // 末尾のメッセージ・ファイルURL行も本文から除去してIDだけ返す
 // (文中URLは本文に残しつつIDも返す = S_UIのカード表示相当)。
-func cleanContent(content, origin string) cleanedContent {
+func CleanContent(content, origin string) Cleaned {
 	lines := strings.Split(content, "\n")
 	isCode := fenceCodeLines(lines)
 
@@ -118,13 +120,13 @@ func cleanContent(content, origin string) cleanedContent {
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
-	return cleanedContent{body: strings.Join(lines, "\n"), quoteIDs: quotes, fileIDs: files}
+	return Cleaned{Body: strings.Join(lines, "\n"), QuoteIDs: quotes, FileIDs: files}
 }
 
-// renderQuoteBody は引用本文 (1段目) の表示用整形。
+// RenderQuoteBody は引用本文 (1段目) の表示用整形。
 // user/channel/group は raw に戻し、入れ子の引用・添付JSONは
 // プレースホルダに置換する (再帰取得はしない)。Markdownは維持。
-func renderQuoteBody(content string) string {
+func RenderQuoteBody(content string) string {
 	lines := strings.Split(content, "\n")
 	isCode := fenceCodeLines(lines)
 	for i, line := range lines {
