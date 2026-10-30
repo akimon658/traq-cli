@@ -19,10 +19,10 @@ type ResolvedToken struct {
 
 // OriginOr はトークンに記録された Origin を優先し、無ければ fallback を返す。
 func (t *Token) OriginOr(fallback string) string {
-	if t.Origin != "" {
-		return t.Origin
+	if t == nil || t.Origin == "" {
+		return fallback
 	}
-	return fallback
+	return t.Origin
 }
 
 // ResolveToken はトークンを --token > TRAQ_ACCESS_TOKEN > 保存済みの順で解決する。
