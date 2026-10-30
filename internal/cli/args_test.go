@@ -41,3 +41,23 @@ func TestChannelUnreadRejectsArgs(t *testing.T) {
 	_, err := runCLI(t, e, "channel", "unread", "extra")
 	require.Error(t, err)
 }
+
+func TestFileDownloadInvalidArgs(t *testing.T) {
+	t.Parallel()
+
+	e := botEnv(t, "")
+	cases := map[string][]string{
+		"no-arg":     {"file", "download"},
+		"too-many":   {"file", "download", "33333333-3333-3333-3333-333333333333", "extra"},
+		"invalid-id": {"file", "download", "not-a-uuid"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := runCLI(t, e, args...)
+			var ec *exit.Error
+			require.ErrorAs(t, err, &ec)
+			assert.Equal(t, exit.Usage, ec.Code)
+		})
+	}
+}

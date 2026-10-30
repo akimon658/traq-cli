@@ -16,6 +16,7 @@ func TestCommandAliases(t *testing.T) {
 		"users":    "user",
 		"channels": "channel",
 		"messages": "message",
+		"files":    "file",
 	}
 	for alias, want := range cases {
 		alias, want := alias, want

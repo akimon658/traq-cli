@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -217,4 +218,12 @@ func (c *Client) GetFileMeta(
 	ctx context.Context, fileID string,
 ) (*traq.FileInfo, *http.Response, error) {
 	return c.API.FileAPI.GetFileMeta(ctx, fileID).Execute()
+}
+
+// GetFile はファイル本体を取得する。go-traq はレスポンス全体をメモリに読み込んだ上で
+// 一時ファイルに書き出すため、返り値のファイルは呼び出し側が Close と Remove を行うこと。
+func (c *Client) GetFile(
+	ctx context.Context, fileID string,
+) (*os.File, *http.Response, error) {
+	return c.API.FileAPI.GetFile(ctx, fileID).Execute()
 }

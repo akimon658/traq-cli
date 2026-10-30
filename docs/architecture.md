@@ -13,6 +13,7 @@ internal/auth/         OAuth プリミティブ (PKCE / 認可URL / トークン
 internal/authflow/     認証の手順 (login / manual / complete / logout / status 検証)
 internal/client/       go-traq の薄ラッパ。origin とトークン注入を隠す
 internal/channel/      チャンネル解決・未読取得・分類
+internal/file/         ファイル取得 (ダウンロード) と保存
 internal/message/      メッセージ取得・検索・投稿と付随情報の拡充
 internal/user/         自ユーザー取得
 internal/view/         人間可読テキストの出力専任。API を呼ばない
@@ -23,8 +24,8 @@ internal/exit/         終了コードと ExitCodeError
 依存方向は次の通り。下位は上位を知らない。
 
 ```
-cli → {authflow, channel, message, user} → session → config → auth
-cli → view → {channel, message, auth, markdown}
+cli → {authflow, channel, file, message, user} → session → config → auth
+cli → view → {channel, file, message, auth, markdown}
 message → channel, markdown
 session → client, auth, exit
 ```
