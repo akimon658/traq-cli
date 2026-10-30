@@ -149,7 +149,7 @@ keyring (macOS Keychain など, service 名は `traq-cli`) を優先し、対応
 ## パッケージ構成
 
 パッケージ全体の構成と依存方向は [`architecture.md`](./architecture.md) を参照すること。
-認証に関わる主要部品は `internal/auth/` (プリミティブ) と `internal/authflow/` (手順) に置く。
+認証に関わる主要部品は `internal/auth/` に置く。
 主要依存: `spf13/cobra`, `traPtitech/go-traq`, `99designs/keyring`。PKCE とトークン交換は標準ライブラリで自前実装する。
 
 ## エラーと終了コード

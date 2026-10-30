@@ -15,9 +15,10 @@ const (
 	revokePath    = "/api/v3/oauth2/revoke"
 
 	callbackPath = "/callback"
-
-	LoginTimeout = 5 * time.Minute
 )
+
+// LoginTimeout はブラウザログイン全体のタイムアウト。テストで短縮できるよう変数にしている。
+var LoginTimeout = 5 * time.Minute
 
 func ParseScopes(s string) []string {
 	fields := strings.FieldsFunc(s, func(r rune) bool {

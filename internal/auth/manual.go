@@ -18,7 +18,7 @@ const ManualRedirectURI = "http://127.0.0.1/callback"
 // テストから短縮できるよう変数にしている。
 var ManualSessionTTL = 15 * time.Minute
 
-const manualSessionFileName = "login-session.json"
+const manualSessionFileName = "login-auth.json"
 
 // ManualSession は traq auth login --manual と traq auth complete の間で保持する
 // OAuth2 ログインセッション。PKCE の verifier はトークン取得に必要な機密情報であり、
