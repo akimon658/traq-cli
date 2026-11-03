@@ -16,7 +16,7 @@ internal/auth/               認証全般。OAuth プリミティブ (PKCE / 認
 internal/domain/channel/     チャンネル解決・未読取得・分類
 internal/domain/file/        ファイル取得 (ダウンロード) と保存
 internal/domain/message/     メッセージ取得・検索・投稿と付随情報の拡充
-internal/domain/user/        自ユーザー取得。ユーザー解決失敗時の共通表示形式
+internal/domain/user/        自ユーザー取得 (FetchMe, `user me` 用) とユーザー解決失敗時の共通表示形式 (FallbackLabel)
 internal/ui/cli/             cobra の配線のみ
 internal/ui/view/            人間可読テキストの出力専任。API を呼ばない
 ```
@@ -26,8 +26,9 @@ internal/ui/view/            人間可読テキストの出力専任。API を�
 ```
 ui/cli → domain → auth → foundation
 ui/cli → ui/view → {domain, auth, foundation/text}
-domain/message → domain/channel, domain/user, foundation/text
-domain/channel → domain/user
+domain/message → domain/channel, foundation/text
+domain/message → domain/user (FallbackLabel の参照のみ。Service 依存なし)
+domain/channel → domain/user (FallbackLabel の参照のみ。Service 依存なし)
 auth → foundation/{client, exit}
 foundation/config → auth (Store/Token 型の保持)
 ```
@@ -44,9 +45,21 @@ foundation/config → auth (Store/Token 型の保持)
 
 - `ui/cli` は配線のみを担う。呼び出し順は フラグ検証 (usage 系) → `auth.ResolveToken` → ドメインサービス → `ui/view` とし、API 呼び出しや整形ロジックは持たない
 - ドメインサービス (`domain/channel` / `domain/message` / `domain/user` / `domain/file`) はデータを返す。表示は `view` に任せ、`view` を import しない
+- ドメインサービスは `config.Env` を保持しない。必要な値 (`origin` / `client` / `auth`) はコンストラクタの明示引数で受け取る
+- `auth.Service` はコマンド毎に `ui/cli` で1個作り、ドメインサービス間で共有する。ドメイン内部で `auth.NewService` や `LoadStore` / `LoadSessions` を呼ばない。`message` が内包する `channel` も同一インスタンスを共有する
 - `ui/view` は `io.Writer` への出力だけを行い、API を呼ばない。入力型は `domain` / `auth` の型を参照する
 - `auth.Exec` が唯一の API 実行経路。401 時の refresh・保存・リトライはここに集約されており、呼び出し元は通常の API 呼び出しと同じ形で書ける
 - 終了コードと `exit.Error` は `foundation/exit` が定義する。`auth` やドメインサービスはこれを返し、`ui/cli.Execute` がコードに変換する
+
+## ドメインサービスの責務分界
+
+- `channel`: チャンネル指定の解決・未読取得・分類。`Origin` を必要としない
+- `file`: ファイル取得と保存先解決。`Origin` を必要としない
+- `user`: `FetchMe` による自ユーザー取得 (`user me` 用)。ユーザー一覧は持たない
+- `message`: メッセージ取得・検索・投稿と付随情報の拡充 (`Enrichment`)。`Origin` のみ保持し、埋め込み解決と結果表示に使う。内包する `channel` は共有された同一 `auth` / `client` で作る
+- ユーザー一覧の取得は `message.FetchEnrichment` が行う。表示条件に依存するため `message` 側に置き、`user` 側に寄せない
+- 自ID・所属グループの取得は `message.fetchSelfBestEffort` が同一 `auth` / `client` で行う。`user.Service` を毎回生成しないための意図的重複であり、`user.FetchMe` と仕様変更時は両方を見ること
+- `user.FallbackLabel` は `Service` 外の純粋関数であり、ユーザー解決失敗時の正規の表示形式。`channel` と `view` が共有する
 
 ## 実行フロー
 

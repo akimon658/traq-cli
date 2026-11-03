@@ -83,7 +83,8 @@ func newMessageSearchCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 				return err
 			}
 			c := client.New(e.Origin)
-			res, err := message.NewService(e, c).Search(cmd.Context(), &rt, word, opts)
+			res, err := message.NewService(e.Origin, c, authSvc).
+				Search(cmd.Context(), &rt, word, opts)
 			if err != nil {
 				return err
 			}

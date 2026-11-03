@@ -7,7 +7,6 @@ import (
 	"github.com/traPtitech/go-traq"
 
 	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/domain/user"
 	"github.com/akimon658/traq-cli/internal/foundation/text"
 )
 
@@ -98,7 +97,7 @@ func (s *Service) fetchQuotesAndFiles(
 ) (map[string]traq.Message, map[string]traq.FileInfo) {
 	quoted := map[string]traq.Message{}
 	files := map[string]traq.FileInfo{}
-	quoteIDs, fileIDs := text.CollectAllEmbedIDs(contents, s.env.Origin)
+	quoteIDs, fileIDs := text.CollectAllEmbedIDs(contents, s.origin)
 	for _, id := range quoteIDs {
 		var qm *traq.Message
 		_ = s.auth.Exec(
@@ -145,13 +144,25 @@ func contentsOf(msgs []traq.Message) []string {
 
 // fetchSelfBestEffort は自分宛メンション判定用の自IDと所属グループを取得する。
 // 表示の補助情報なので、取得に失敗しても空のまま続行する。
+// user.Service を使わず同一の auth/client で取得する。責務分界は docs/architecture.md を参照すること。
 func (s *Service) fetchSelfBestEffort(
 	ctx context.Context,
 	rt *auth.ResolvedToken,
 ) (string, map[string]struct{}) {
-	userSvc := user.NewService(s.env, s.client)
-	me, err := userSvc.FetchMe(ctx, rt)
-	if err != nil || me == nil {
+	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
+		return "", map[string]struct{}{}
+	}
+	var me *traq.MyUserDetail
+	if err := s.auth.Exec(
+		ctx,
+		rt,
+		func(ctx context.Context) (*http.Response, error) {
+			var resp *http.Response
+			var apiErr error
+			me, resp, apiErr = s.client.GetMe(ctx, rt.Token.AccessToken)
+			return resp, apiErr
+		},
+	); err != nil || me == nil {
 		return "", map[string]struct{}{}
 	}
 	groups := make(map[string]struct{}, len(me.Groups))

@@ -153,7 +153,7 @@ func (s *Service) List(
 		Loc:        time.Local,
 		Unread:     unread,
 		UnreadOnly: opts.UnreadOnly,
-		Origin:     s.env.Origin,
+		Origin:     s.origin,
 	}, nil
 }
 

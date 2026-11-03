@@ -39,7 +39,7 @@ func newUserCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
 				return err
 			}
 			c := client.New(e.Origin)
-			me, err := user.NewService(e, c).FetchMe(cmd.Context(), &rt)
+			me, err := user.NewService(c, authSvc).FetchMe(cmd.Context(), &rt)
 			if err != nil {
 				return err
 			}

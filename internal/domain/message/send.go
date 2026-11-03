@@ -43,6 +43,6 @@ func (s *Service) Send(
 		Msg:        *msg,
 		Enrichment: enrich,
 		Loc:        time.Local,
-		Origin:     s.env.Origin,
+		Origin:     s.origin,
 	}, nil
 }

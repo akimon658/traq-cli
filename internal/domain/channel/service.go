@@ -11,29 +11,21 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/client"
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
 // Service はチャンネル操作に必要な常駐依存を束ねる。
-// 実行環境と通信路は構築時に固定し、要求ごとの認証情報はメソッド引数で受ける。
+// 通信路と認証は構築時に固定し、要求ごとの認証情報はメソッド引数で受ける。
 type Service struct {
-	env    *config.Env
 	client *client.Client
 	auth   *auth.Service
 }
 
 // NewService はチャンネルサービスを作る。
-func NewService(env *config.Env, client *client.Client) *Service {
+func NewService(client *client.Client, auth *auth.Service) *Service {
 	return &Service{
-		env:    env,
 		client: client,
-		auth: auth.NewService(
-			env.Origin,
-			env.ClientID,
-			env.LoadStore(),
-			env.LoadSessions(),
-		),
+		auth:   auth,
 	}
 }
 

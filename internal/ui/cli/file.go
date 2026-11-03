@@ -56,11 +56,12 @@ func newFileDownloadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Co
 				return err
 			}
 			c := client.New(e.Origin)
-			res, err := file.NewService(e, c).Download(cmd.Context(), &rt, file.DownloadOptions{
-				FileID: args[0],
-				Out:    out,
-				Force:  force,
-			})
+			res, err := file.NewService(c, authSvc).
+				Download(cmd.Context(), &rt, file.DownloadOptions{
+					FileID: args[0],
+					Out:    out,
+					Force:  force,
+				})
 			if err != nil {
 				return err
 			}

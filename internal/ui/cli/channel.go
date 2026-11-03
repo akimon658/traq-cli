@@ -46,7 +46,7 @@ func newChannelUnreadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 				return err
 			}
 			c := client.New(e.Origin)
-			groups, err := channel.NewService(e, c).FetchUnreadGroups(cmd.Context(), &rt)
+			groups, err := channel.NewService(c, authSvc).FetchUnreadGroups(cmd.Context(), &rt)
 			if err != nil {
 				return err
 			}

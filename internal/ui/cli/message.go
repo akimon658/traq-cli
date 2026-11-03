@@ -49,7 +49,7 @@ func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command
 				return err
 			}
 			c := client.New(e.Origin)
-			res, err := message.NewService(e, c).Send(
+			res, err := message.NewService(e.Origin, c, authSvc).Send(
 				cmd.Context(), &rt, args[0], strings.Join(args[1:], " "),
 			)
 			if err != nil {
@@ -137,7 +137,8 @@ bot トークンでは未読が生成されないため、常に未読0件にな
 				return err
 			}
 			c := client.New(e.Origin)
-			res, err := message.NewService(e, c).List(cmd.Context(), &rt, args[0], opts)
+			res, err := message.NewService(e.Origin, c, authSvc).
+				List(cmd.Context(), &rt, args[0], opts)
 			if err != nil {
 				return err
 			}

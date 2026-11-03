@@ -138,7 +138,7 @@ func (s *Service) Search(
 		Msgs:       result.Hits,
 		Enrichment: enrich,
 		Loc:        time.Local,
-		Origin:     s.env.Origin,
+		Origin:     s.origin,
 	}, nil
 }
 
