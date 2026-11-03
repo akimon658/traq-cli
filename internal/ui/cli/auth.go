@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/ui/view"
@@ -188,25 +187,14 @@ func runLogout(cmd *cobra.Command, e *config.Env) error {
 
 func runStatus(cmd *cobra.Command, e *config.Env) error {
 	svc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
-	rt, err := svc.ResolveToken(
-		cmd.Context(),
-		e.TokenOverride,
-		e.AccessToken,
-	)
+	st, err := svc.Status(cmd.Context(), e.TokenOverride, e.AccessToken)
 	if err != nil {
 		return err
 	}
-	c := client.New(e.Origin)
-	me, _, meErr := auth.VerifyToken(cmd.Context(), c, rt.Token.AccessToken)
-	if me != nil {
-		rt.Token.UserID = me.Id
-		rt.Token.UserName = me.Name
-		rt.Token.UserBot = me.Bot
-	}
-	if err := view.WriteAuthStatus(cmd.OutOrStdout(), e.Origin, rt.Source, *rt.Token); err != nil {
+	if err := view.WriteAuthStatus(cmd.OutOrStdout(), st.Origin, st.Source, st.Token); err != nil {
 		return err
 	}
-	return meErr
+	return st.VerifyErr
 }
 
 func openBrowser(url string) {
