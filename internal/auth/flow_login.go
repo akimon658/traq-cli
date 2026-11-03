@@ -46,7 +46,7 @@ type BrowserSession struct {
 
 // PrepareBrowserLogin は PKCE 生成・コールバックサーバー起動・認可 URL 組み立てを行う。
 // 呼び出し元は AuthorizeURL を表示し、Callback.Wait でコードを待つこと。
-func PrepareBrowserLogin(origin, clientID, scopeFlag string) (*BrowserSession, error) {
+func (s *Service) PrepareBrowserLogin(scopeFlag string) (*BrowserSession, error) {
 	scopes, err := NormalizeScopes(ParseScopes(scopeFlag))
 	if err != nil {
 		return nil, exit.UsageError(err)
@@ -64,7 +64,7 @@ func PrepareBrowserLogin(origin, clientID, scopeFlag string) (*BrowserSession, e
 		PKCE:         pk,
 		Callback:     cb,
 		RedirectURI:  redirectURI,
-		AuthorizeURL: pk.AuthorizeURL(origin, clientID, redirectURI, scopes),
+		AuthorizeURL: pk.AuthorizeURL(s.origin, s.clientID, redirectURI, scopes),
 		Scopes:       scopes,
 	}, nil
 }

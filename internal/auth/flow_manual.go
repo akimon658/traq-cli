@@ -12,11 +12,8 @@ import (
 )
 
 // StartManualLogin は --manual のセッションを保存し、認可 URL を返す。
-func StartManualLogin(
-	origin, clientID, scopeFlag string,
-	sessions SessionStore,
-) (string, error) {
-	if clientID == "" {
+func (s *Service) StartManualLogin(scopeFlag string) (string, error) {
+	if s.clientID == "" {
 		return "", exit.UsageError(
 			errors.New(
 				"OAuth client ID is not configured; set TRAQ_CLIENT_ID or --client-id (see docs/auth.md)",
@@ -35,12 +32,12 @@ func StartManualLogin(
 		Verifier:    pk.Verifier,
 		State:       pk.State,
 		RedirectURI: ManualRedirectURI,
-		Origin:      origin,
-		ClientID:    clientID,
+		Origin:      s.origin,
+		ClientID:    s.clientID,
 		Scopes:      scopes,
 		CreatedAt:   time.Now(),
 	}
-	if _, err := sessions.Save(sess); err != nil {
+	if _, err := s.sessions.Save(sess); err != nil {
 		return "", err
 	}
 	return pk.AuthorizeURL(sess.Origin, sess.ClientID, sess.RedirectURI, scopes), nil

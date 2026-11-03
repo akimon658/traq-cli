@@ -19,7 +19,6 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/client"
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
@@ -197,7 +196,7 @@ func (d oauthDriver) drive(
 	var res loginResult
 	var buf bytes.Buffer
 	res.err = browserLogin{
-		env:         &config.Env{Origin: testTraqOrigin, ClientID: d.clientID, Store: d.store},
+		svc:         auth.NewService(testTraqOrigin, d.clientID, d.store, nil),
 		openBrowser: browserSim(t, d.sess, submit, obs),
 		out:         &buf,
 	}.run(t.Context(), scopeFlag)

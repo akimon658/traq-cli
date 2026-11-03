@@ -57,7 +57,7 @@ func (s *Service) ResolveToken(
 				errors.New("the stored token has expired: run 'traq auth login'"),
 			)
 		}
-		nt, rerr := Refresh(ctx, stored.OriginOr(s.origin), s.clientID, stored)
+		nt, rerr := s.Refresh(ctx, stored)
 		if rerr != nil {
 			_, _ = s.store.Delete()
 			return ResolvedToken{}, exit.AuthRequiredError(
@@ -81,7 +81,7 @@ func (s *Service) Exec(
 ) error {
 	resp, err := fn(client.TokenContext(ctx, rt.Token.AccessToken))
 	if resp != nil && resp.StatusCode == http.StatusUnauthorized {
-		nt, rerr := RefreshToken(ctx, s.origin, s.clientID, rt.Token)
+		nt, rerr := s.RefreshToken(ctx, rt.Token)
 		if rerr != nil {
 			return exit.AuthRequiredError(
 				fmt.Errorf(
@@ -103,14 +103,14 @@ func (s *Service) Exec(
 }
 
 // RefreshToken は OAuth トークンを更新する。Bot トークン等は更新できない。
-func RefreshToken(ctx context.Context, origin, clientID string, t *Token) (Token, error) {
+func (s *Service) RefreshToken(ctx context.Context, t *Token) (Token, error) {
 	if t.Method != MethodOAuth {
 		return Token{}, errors.New("this token type cannot be refreshed")
 	}
 	if t.RefreshToken == "" {
 		return Token{}, errors.New("no refresh token available")
 	}
-	return Refresh(ctx, t.OriginOr(origin), clientID, *t)
+	return s.Refresh(ctx, *t)
 }
 
 // RequireScope は保存済み OAuth トークンのスコープを事前検査する。
