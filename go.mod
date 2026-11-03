@@ -11,7 +11,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/compose v0.44.0
 	github.com/traPtitech/go-traq v0.0.0-20261026061505-75237f7bff71
 	go.uber.org/mock v0.6.0
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.24.0
 )
 
 require (
