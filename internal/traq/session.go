@@ -1,13 +1,11 @@
-package auth
+package traq
 
 import (
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
@@ -72,36 +70,6 @@ func (s *Service) ResolveToken(
 	return ResolvedToken{Token: &stored, Source: source}, nil
 }
 
-// Exec は API を実行し、401 なら refresh して1回だけリトライする。
-// refresh 後のトークンは保存先に書き戻し、呼び出し元の ResolvedToken も更新する。
-func (s *Service) Exec(
-	ctx context.Context,
-	rt *ResolvedToken,
-	fn func(ctx context.Context) (*http.Response, error),
-) error {
-	resp, err := fn(client.TokenContext(ctx, rt.Token.AccessToken))
-	if resp != nil && resp.StatusCode == http.StatusUnauthorized {
-		nt, rerr := s.RefreshToken(ctx, rt.Token)
-		if rerr != nil {
-			return exit.AuthRequiredError(
-				fmt.Errorf(
-					"the token was rejected and cannot be refreshed (%v); run 'traq auth login'",
-					rerr,
-				),
-			)
-		}
-		if _, serr := s.store.Save(nt); serr != nil {
-			return serr
-		}
-		*rt.Token = nt
-		resp, err = fn(client.TokenContext(ctx, rt.Token.AccessToken))
-	}
-	if err != nil {
-		return exit.GeneralError(client.WrapError(err, resp))
-	}
-	return nil
-}
-
 // RefreshToken は OAuth トークンを更新する。Bot トークン等は更新できない。
 func (s *Service) RefreshToken(ctx context.Context, t *Token) (Token, error) {
 	if t.Method != MethodOAuth {
@@ -111,23 +79,4 @@ func (s *Service) RefreshToken(ctx context.Context, t *Token) (Token, error) {
 		return Token{}, errors.New("no refresh token available")
 	}
 	return s.Refresh(ctx, *t)
-}
-
-// RequireScope は保存済み OAuth トークンのスコープを事前検査する。
-// Bot トークンやスコープ不明な手動トークン (--token) は検査せず、サーバーの判定に委ねる。
-func RequireScope(rt *ResolvedToken, scope string) error {
-	if rt.Token.LacksScope(scope) {
-		required := scope
-		if scope == ScopeWrite {
-			required = ScopeRead + "," + ScopeWrite
-		}
-		return exit.ScopeInsufficientError(
-			fmt.Errorf(
-				"the current token does not have the '%s' scope; re-run 'traq auth login --browser --scope %s'",
-				scope,
-				required,
-			),
-		)
-	}
-	return nil
 }

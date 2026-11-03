@@ -14,12 +14,11 @@ import (
 	"github.com/moznion/go-optional"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 	"go.uber.org/mock/gomock"
 
-	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // noRedirectClient はリダイレクトを追従しない HTTP クライアント。
@@ -45,12 +44,12 @@ func createOAuthClient(t *testing.T, sess *http.Cookie) string {
 	t.Helper()
 	created, _, err := traqAPIClient(t, optional.Some(sess)).
 		Oauth2API.CreateClient(t.Context()).
-		PostClientRequest(traq.PostClientRequest{
+		PostClientRequest(gotraq.PostClientRequest{
 			// traQ のクライアント名には 1〜32 文字の制限がある
 			Name:        "cli-" + strings.ReplaceAll(uuid.New().String(), "-", "")[:27],
 			Description: "traQ CLI integration test client",
 			CallbackUrl: "http://127.0.0.1/callback",
-			Scopes:      []traq.OAuth2Scope{traq.OAUTH2SCOPE_READ, traq.OAUTH2SCOPE_WRITE},
+			Scopes:      []gotraq.OAuth2Scope{gotraq.OAUTH2SCOPE_READ, gotraq.OAUTH2SCOPE_WRITE},
 		}).
 		Execute()
 	require.NoError(t, err, "failed to create an OAuth client")
@@ -182,7 +181,7 @@ type loginResult struct {
 type oauthDriver struct {
 	clientID string
 	sess     *http.Cookie
-	store    *auth.MockStore
+	store    *traq.MockStore
 }
 
 // drive は `traq auth login --browser` 相当の OAuth フローを実行し、
@@ -196,7 +195,7 @@ func (d oauthDriver) drive(
 	var res loginResult
 	var buf bytes.Buffer
 	res.err = browserLogin{
-		svc:         auth.NewService(testTraqOrigin, d.clientID, d.store, nil),
+		svc:         traq.NewService(testTraqOrigin, d.clientID, d.store, nil),
 		openBrowser: browserSim(t, d.sess, submit, obs),
 		out:         &buf,
 	}.run(t.Context(), scopeFlag)
@@ -210,29 +209,29 @@ func TestAuthLoginBrowserRead(t *testing.T) {
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
-	ms := auth.NewMockStore(gomock.NewController(t))
-	var saved auth.Token
+	ms := traq.NewMockStore(gomock.NewController(t))
+	var saved traq.Token
 	gomock.InOrder(
-		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 			saved = tok
 			return "keychain", nil
 		}).Times(1),
 		// users me と message send がそれぞれ Load する
-		ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+		ms.EXPECT().Load().DoAndReturn(func() (traq.Token, string, bool, error) {
 			return saved, "keychain", true, nil
 		}).Times(2),
 	)
 
 	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
-		t, auth.ScopeRead, "approve",
+		t, traq.ScopeRead, "approve",
 	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 	assert.Contains(t, res.out, "signed in: @traq (user) scopes: read")
 	assert.Contains(t, res.out, "storage: keychain")
 
-	assert.Equal(t, auth.MethodOAuth, saved.Method)
-	assert.Equal(t, []string{auth.ScopeRead}, saved.Scope)
+	assert.Equal(t, traq.MethodOAuth, saved.Method)
+	assert.Equal(t, []string{traq.ScopeRead}, saved.Scope)
 	assert.Equal(t, "traq", saved.UserName)
 	assert.False(t, saved.UserBot)
 	assert.Equal(t, testTraqOrigin, saved.Origin)
@@ -261,14 +260,14 @@ func TestAuthLoginBrowserWrite(t *testing.T) {
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
-	ms := auth.NewMockStore(gomock.NewController(t))
-	var saved auth.Token
+	ms := traq.NewMockStore(gomock.NewController(t))
+	var saved traq.Token
 	gomock.InOrder(
-		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 			saved = tok
 			return "keychain", nil
 		}).Times(1),
-		ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+		ms.EXPECT().Load().DoAndReturn(func() (traq.Token, string, bool, error) {
 			return saved, "keychain", true, nil
 		}).Times(1),
 	)
@@ -279,7 +278,7 @@ func TestAuthLoginBrowserWrite(t *testing.T) {
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 	assert.Contains(t, res.out, "signed in: @traq (user) scopes: read,write")
-	assert.Equal(t, []string{auth.ScopeRead, auth.ScopeWrite}, saved.Scope)
+	assert.Equal(t, []string{traq.ScopeRead, traq.ScopeWrite}, saved.Scope)
 
 	const content = "hello traq-cli as oauth (read,write)"
 	e := overrideEnv(t, ms, clientID)
@@ -294,10 +293,10 @@ func TestAuthLoginBrowserDenied(t *testing.T) {
 	clientID, sess := prepareOAuth(t)
 
 	// Save への期待値を設定しない: Save が呼ばれたら gomock がテストを失敗させる
-	ms := auth.NewMockStore(gomock.NewController(t))
+	ms := traq.NewMockStore(gomock.NewController(t))
 
 	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
-		t, auth.ScopeRead, "deny",
+		t, traq.ScopeRead, "deny",
 	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.Error(t, res.err, "denied authorization should fail the login, output: %s", res.out)
@@ -309,15 +308,15 @@ func TestAuthLoginTokenOAuthType(t *testing.T) {
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
-	ms := auth.NewMockStore(gomock.NewController(t))
-	var saves []auth.Token
-	ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+	ms := traq.NewMockStore(gomock.NewController(t))
+	var saves []traq.Token
+	ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 		saves = append(saves, tok)
 		return "keychain", nil
 	}).Times(2)
 
 	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
-		t, auth.ScopeRead, "approve",
+		t, traq.ScopeRead, "approve",
 	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
@@ -331,7 +330,7 @@ func TestAuthLoginTokenOAuthType(t *testing.T) {
 	assert.Contains(t, out, "signed in: @traq (user)")
 	require.Len(t, saves, 2)
 	assert.Equal(t, oauthAccessToken, saves[1].AccessToken)
-	assert.Equal(t, auth.MethodOAuth, saves[1].Method)
+	assert.Equal(t, traq.MethodOAuth, saves[1].Method)
 	assert.False(t, saves[1].UserBot)
 	assert.Equal(t, "traq", saves[1].UserName)
 	assert.Equal(t, testTraqOrigin, saves[1].Origin)
@@ -342,20 +341,20 @@ func TestAuthStatusOAuth(t *testing.T) {
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
-	ms := auth.NewMockStore(gomock.NewController(t))
-	var saved auth.Token
+	ms := traq.NewMockStore(gomock.NewController(t))
+	var saved traq.Token
 	gomock.InOrder(
-		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 			saved = tok
 			return "keychain", nil
 		}).Times(1),
-		ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+		ms.EXPECT().Load().DoAndReturn(func() (traq.Token, string, bool, error) {
 			return saved, "keychain", true, nil
 		}).Times(1),
 	)
 
 	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
-		t, auth.ScopeRead, "approve",
+		t, traq.ScopeRead, "approve",
 	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
@@ -368,7 +367,7 @@ func TestAuthStatusOAuth(t *testing.T) {
 		"origin: " + testTraqOrigin,
 		"source: keychain",
 		"method: oauth",
-		"scopes: " + auth.ScopeRead,
+		"scopes: " + traq.ScopeRead,
 		"userId: " + saved.UserID,
 		"user: @" + saved.UserName,
 		"expiresAt: " + saved.ExpiresAt.Format(time.RFC3339),
@@ -382,21 +381,21 @@ func TestAuthLogoutOAuth(t *testing.T) {
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
-	ms := auth.NewMockStore(gomock.NewController(t))
-	var saved auth.Token
+	ms := traq.NewMockStore(gomock.NewController(t))
+	var saved traq.Token
 	gomock.InOrder(
-		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 			saved = tok
 			return "keychain", nil
 		}).Times(1),
-		ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+		ms.EXPECT().Load().DoAndReturn(func() (traq.Token, string, bool, error) {
 			return saved, "keychain", true, nil
 		}).Times(1),
 		ms.EXPECT().Delete().Return(true, nil).Times(1),
 	)
 
 	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
-		t, auth.ScopeRead, "approve",
+		t, traq.ScopeRead, "approve",
 	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
@@ -416,27 +415,27 @@ func TestAuthOAuthRefresh(t *testing.T) {
 	t.Run("expired token", func(t *testing.T) {
 		t.Parallel()
 		clientID, sess := prepareOAuth(t)
-		ms := auth.NewMockStore(gomock.NewController(t))
-		var loggedIn, refreshed auth.Token
+		ms := traq.NewMockStore(gomock.NewController(t))
+		var loggedIn, refreshed traq.Token
 		gomock.InOrder(
-			ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+			ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 				loggedIn = tok
 				return "keychain", nil
 			}).Times(1),
-			ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+			ms.EXPECT().Load().DoAndReturn(func() (traq.Token, string, bool, error) {
 				// 有効期限を過ぎたトークンを返す。refresh トークンは温存する
 				expired := loggedIn
 				expired.ExpiresAt = time.Now().Add(-time.Minute)
 				return expired, "keychain", true, nil
 			}).Times(1),
-			ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+			ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 				refreshed = tok
 				return "keychain", nil
 			}).Times(1),
 		)
 
 		res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
-			t, auth.ScopeRead, "approve",
+			t, traq.ScopeRead, "approve",
 		)
 		require.NoError(t, res.sim.err, "the browser simulation failed")
 		require.NoError(t, res.err, "browser login failed, output: %s", res.out)
@@ -452,33 +451,33 @@ func TestAuthOAuthRefresh(t *testing.T) {
 		assert.NotEqual(t, loggedIn.AccessToken, refreshed.AccessToken)
 		assert.NotEqual(t, loggedIn.RefreshToken, refreshed.RefreshToken)
 		assert.False(t, refreshed.ExpiresAt.IsZero())
-		assert.Equal(t, auth.MethodOAuth, refreshed.Method)
+		assert.Equal(t, traq.MethodOAuth, refreshed.Method)
 	})
 
 	t.Run("401 then refresh", func(t *testing.T) {
 		t.Parallel()
 		clientID, sess := prepareOAuth(t)
-		ms := auth.NewMockStore(gomock.NewController(t))
-		var loggedIn, refreshed auth.Token
+		ms := traq.NewMockStore(gomock.NewController(t))
+		var loggedIn, refreshed traq.Token
 		gomock.InOrder(
-			ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+			ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 				loggedIn = tok
 				return "keychain", nil
 			}).Times(1),
-			ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+			ms.EXPECT().Load().DoAndReturn(func() (traq.Token, string, bool, error) {
 				// アクセストークンだけが無効になった状態を再現する
 				broken := loggedIn
 				broken.AccessToken = "corrupted-" + loggedIn.AccessToken
 				return broken, "keychain", true, nil
 			}).Times(1),
-			ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+			ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 				refreshed = tok
 				return "keychain", nil
 			}).Times(1),
 		)
 
 		res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
-			t, auth.ScopeRead, "approve",
+			t, traq.ScopeRead, "approve",
 		)
 		require.NoError(t, res.sim.err, "the browser simulation failed")
 		require.NoError(t, res.err, "browser login failed, output: %s", res.out)
@@ -538,7 +537,7 @@ func requestNoRedirect(
 func apiMeStatus(t *testing.T, token string) int {
 	t.Helper()
 	_, resp, err := botAPIClient(t).MeAPI.GetMe(
-		client.TokenContext(t.Context(), token),
+		traq.TokenContext(t.Context(), token),
 	).Execute()
 	require.NotNil(t, resp, "no HTTP response: %v", err)
 	return resp.StatusCode
@@ -546,7 +545,7 @@ func apiMeStatus(t *testing.T, token string) int {
 
 // traqAPIClient はテストから traQ API を直接叩くための go-traq クライアントを返す。
 // sess が Some の場合は管理者セッションのクッキーを全リクエストに付与する。
-func traqAPIClient(t *testing.T, sess optional.Option[*http.Cookie]) *traq.APIClient {
+func traqAPIClient(t *testing.T, sess optional.Option[*http.Cookie]) *gotraq.APIClient {
 	t.Helper()
 	return traqClient(testTraqOrigin, sess)
 }
@@ -555,7 +554,7 @@ func traqAPIClient(t *testing.T, sess optional.Option[*http.Cookie]) *traq.APICl
 func createChannelAsAdmin(t *testing.T, sess *http.Cookie, name string) string {
 	t.Helper()
 	ch, _, err := traqAPIClient(t, optional.Some(sess)).ChannelAPI.CreateChannel(t.Context()).
-		PostChannelRequest(traq.PostChannelRequest{Name: name}).
+		PostChannelRequest(gotraq.PostChannelRequest{Name: name}).
 		Execute()
 	require.NoError(t, err, "failed to create a channel")
 	require.NotEmpty(t, ch.Id, "no channel id in the response")
@@ -567,10 +566,10 @@ func createChannelAsAdmin(t *testing.T, sess *http.Cookie, name string) string {
 func postMessageAsBot(t *testing.T, channelID, content string) string {
 	t.Helper()
 	msg, _, err := traqAPIClient(t, optional.None[*http.Cookie]()).MessageAPI.PostMessage(
-		client.TokenContext(t.Context(), testTraqToken), channelID,
-	).PostMessageRequest(traq.PostMessageRequest{
+		traq.TokenContext(t.Context(), testTraqToken), channelID,
+	).PostMessageRequest(gotraq.PostMessageRequest{
 		Content: content,
-		Embed:   traq.PtrBool(true),
+		Embed:   gotraq.PtrBool(true),
 	}).Execute()
 	require.NoError(t, err, "failed to post a message as the bot")
 	require.False(t, msg.CreatedAt.IsZero(), "no createdAt in the response")
@@ -579,10 +578,10 @@ func postMessageAsBot(t *testing.T, channelID, content string) string {
 
 // waitForChannelUnread は未読の生成が非同期に行われるため、
 // channelID の未読エントリが現れるまでポーリングする。
-func waitForChannelUnread(t *testing.T, token, channelID string) traq.UnreadChannel {
+func waitForChannelUnread(t *testing.T, token, channelID string) gotraq.UnreadChannel {
 	t.Helper()
 	api := traqAPIClient(t, optional.None[*http.Cookie]())
-	ctx := client.TokenContext(t.Context(), token)
+	ctx := traq.TokenContext(t.Context(), token)
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		entries, _, err := api.MeAPI.GetMyUnreadChannels(ctx).Execute()
@@ -607,20 +606,20 @@ func TestMessageListUnreadOnly(t *testing.T) {
 	requireTraqStack(t)
 	clientID, sess := prepareOAuth(t)
 
-	ms := auth.NewMockStore(gomock.NewController(t))
-	var saved auth.Token
+	ms := traq.NewMockStore(gomock.NewController(t))
+	var saved traq.Token
 	gomock.InOrder(
-		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 			saved = tok
 			return "keychain", nil
 		}).Times(1),
 		// 以降、CLI を 3 回実行する
-		ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+		ms.EXPECT().Load().DoAndReturn(func() (traq.Token, string, bool, error) {
 			return saved, "keychain", true, nil
 		}).Times(3),
 	)
 	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
-		t, auth.ScopeRead, "approve",
+		t, traq.ScopeRead, "approve",
 	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)

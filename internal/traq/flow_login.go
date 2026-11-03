@@ -1,4 +1,4 @@
-package auth
+package traq
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/akimon658/traq-cli/internal/foundation/client"
+	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
@@ -17,9 +17,9 @@ func (s *Service) LoginWithToken(
 	ctx context.Context,
 	value string,
 ) (Token, string, error) {
-	me, resp, err := s.client.GetMe(ctx, value)
+	me, resp, err := s.api.MeAPI.GetMe(TokenContext(ctx, value)).Execute()
 	if err != nil {
-		apiErr := client.WrapError(err, resp)
+		apiErr := WrapError(err, resp)
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			return Token{}, "", exit.GeneralError(
 				fmt.Errorf("the token was rejected: %s", apiErr.Error()),
@@ -38,7 +38,7 @@ func (s *Service) LoginWithToken(
 // BrowserSession はブラウザログインの準備結果を保持する。
 type BrowserSession struct {
 	PKCE         PKCE
-	Callback     *CallbackServer
+	Callback     *auth.CallbackServer
 	RedirectURI  string
 	AuthorizeURL string
 	Scopes       []string
@@ -55,7 +55,7 @@ func (s *Service) PrepareBrowserLogin(scopeFlag string) (*BrowserSession, error)
 	if err != nil {
 		return nil, err
 	}
-	cb, err := ListenCallback(pk.State)
+	cb, err := auth.ListenCallback(pk.State)
 	if err != nil {
 		return nil, err
 	}
@@ -84,9 +84,9 @@ func (s *Service) FinishLogin(
 		scopeList = req.FallbackScopes
 	}
 
-	me, meResp, err := s.client.GetMe(ctx, resp.AccessToken)
+	me, meResp, err := s.api.MeAPI.GetMe(TokenContext(ctx, resp.AccessToken)).Execute()
 	if err != nil {
-		return Token{}, "", exit.GeneralError(client.WrapError(err, meResp))
+		return Token{}, "", exit.GeneralError(WrapError(err, meResp))
 	}
 	t := buildTokenFromMe(s.origin, resp.AccessToken, me)
 	t.RefreshToken = resp.RefreshToken

@@ -3,17 +3,15 @@ package message
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 	"uuid"
 
 	"github.com/moznion/go-optional"
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 const (
@@ -26,7 +24,6 @@ const (
 // Search はメッセージを検索する。
 func (s *Service) Search(
 	ctx context.Context,
-	rt *auth.ResolvedToken,
 	word string,
 	opts SearchOptions,
 ) (SearchResult, error) {
@@ -42,23 +39,19 @@ func (s *Service) Search(
 		return SearchResult{}, err
 	}
 
-	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
-		return SearchResult{}, err
-	}
-
 	// ユーザー一覧は名前解決と表示の両方に使うため先に取得する。
-	users, err := s.fetchUserList(ctx, rt)
+	users, err := s.fetchUserList(ctx)
 	if err != nil {
 		return SearchResult{}, err
 	}
-	userByID := make(map[string]traq.User, len(users))
+	userByID := make(map[string]gotraq.User, len(users))
 	nameToID := make(map[string]string, len(users))
 	for _, u := range users {
 		userByID[u.Id] = u
 		nameToID[u.Name] = u.Id
 	}
 
-	q := client.SearchQuery{
+	q := traq.SearchQuery{
 		After:          after,
 		Before:         before,
 		Bot:            opts.Bot,
@@ -75,7 +68,7 @@ func (s *Service) Search(
 		q.Word = optional.Some(word)
 	}
 	if opts.In != "" {
-		channelID, err := s.channel.ResolveChannel(ctx, rt, opts.In)
+		channelID, err := s.channel.ResolveChannel(ctx, opts.In)
 		if err != nil {
 			return SearchResult{}, err
 		}
@@ -99,33 +92,25 @@ func (s *Service) Search(
 		q.Citation = optional.Some(opts.Citation)
 	}
 
-	var result *traq.MessageSearchResult
-	if err := s.auth.Exec(
-		ctx,
-		rt,
-		func(ctx context.Context) (*http.Response, error) {
-			var resp *http.Response
-			result, resp, err = s.client.SearchMessages(ctx, q)
-			return resp, err
-		},
-	); err != nil {
+	result, err := s.api.SearchMessages(ctx, q)
+	if err != nil {
 		return SearchResult{}, err
 	}
 
 	enrich := Enrichment{
 		Users: userByID, Stamps: map[string]string{},
-		Quoted: map[string]traq.Message{}, Files: map[string]traq.FileInfo{},
+		Quoted: map[string]gotraq.Message{}, Files: map[string]gotraq.FileInfo{},
 		MyGroups: map[string]struct{}{},
 	}
-	enrich.SelfID, enrich.MyGroups = s.fetchSelfBestEffort(ctx, rt)
+	enrich.SelfID, enrich.MyGroups = s.fetchSelfBestEffort(ctx)
 	if len(result.Hits) > 0 {
-		stamps, err := s.fetchStampMap(ctx, rt)
+		stamps, err := s.fetchStampMap(ctx)
 		if err != nil {
 			return SearchResult{}, err
 		}
 		enrich.Stamps = stamps
 		enrich.Quoted, enrich.Files = s.fetchQuotesAndFiles(
-			ctx, rt, contentsOf(result.Hits),
+			ctx, contentsOf(result.Hits),
 		)
 	}
 

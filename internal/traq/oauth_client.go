@@ -1,4 +1,4 @@
-package auth
+package traq
 
 import (
 	"fmt"
@@ -13,8 +13,6 @@ const (
 	authorizePath = "/api/v3/oauth2/authorize"
 	tokenPath     = "/api/v3/oauth2/token"
 	revokePath    = "/api/v3/oauth2/revoke"
-
-	callbackPath = "/callback"
 )
 
 // LoginTimeout はブラウザログイン全体のタイムアウト。テストで短縮できるよう変数にしている。

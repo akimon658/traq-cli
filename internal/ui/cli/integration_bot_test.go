@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 var messageIDPattern = regexp.MustCompile(`id:([0-9a-fA-F-]{36})`)
@@ -191,18 +191,18 @@ func TestAuthLoginTokenAndLogout(t *testing.T) {
 	t.Parallel()
 	requireTraqStack(t)
 
-	ms := auth.NewMockStore(gomock.NewController(t))
-	var saved auth.Token
+	ms := traq.NewMockStore(gomock.NewController(t))
+	var saved traq.Token
 	gomock.InOrder(
-		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 			saved = tok
 			return "keychain", nil
 		}).Times(1),
-		ms.EXPECT().Load().DoAndReturn(func() (auth.Token, string, bool, error) {
+		ms.EXPECT().Load().DoAndReturn(func() (traq.Token, string, bool, error) {
 			return saved, "keychain", true, nil
 		}).Times(1),
 		ms.EXPECT().Delete().Return(true, nil).Times(1),
-		ms.EXPECT().Load().Return(auth.Token{}, "", false, nil).Times(1),
+		ms.EXPECT().Load().Return(traq.Token{}, "", false, nil).Times(1),
 	)
 	e := overrideEnv(t, ms)
 
@@ -211,7 +211,7 @@ func TestAuthLoginTokenAndLogout(t *testing.T) {
 	assert.Contains(t, out, "signed in: @")
 	tok := saved
 	assert.Equal(t, testTraqToken, tok.AccessToken)
-	assert.Equal(t, auth.MethodBot, tok.Method)
+	assert.Equal(t, traq.MethodBot, tok.Method)
 	assert.NotEmpty(t, tok.UserName, "userName is empty")
 	assert.Equal(t, testTraqOrigin, tok.Origin)
 
@@ -229,7 +229,7 @@ func TestAuthLoginInvalidToken(t *testing.T) {
 	t.Parallel()
 	requireTraqStack(t)
 
-	ms := auth.NewMockStore(gomock.NewController(t))
+	ms := traq.NewMockStore(gomock.NewController(t))
 	e := overrideEnv(t, ms)
 
 	_, err := runCLI(t, e, "auth", "login", "--token", "invalid")

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -19,6 +21,12 @@ const ManualRedirectURI = "http://127.0.0.1/callback"
 var ManualSessionTTL = 15 * time.Minute
 
 const manualSessionFileName = "login-session.json"
+
+// セッション保存先のパーミッション。credentials と同じく 0600/0700 にする。
+const (
+	sessionDirPerm  = 0o700
+	sessionFilePerm = 0o600
+)
 
 // ManualSession は traq auth login --manual と traq auth complete の間で保持する
 // OAuth2 ログインセッション。PKCE の verifier はトークン取得に必要な機密情報であり、
@@ -74,10 +82,10 @@ func (s defaultSessionStore) Save(sess ManualSession) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), credentialsDirPerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), sessionDirPerm); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, data, credentialsFilePerm); err != nil {
+	if err := os.WriteFile(path, data, sessionFilePerm); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -141,4 +149,32 @@ func (s defaultSessionStore) Delete() (bool, error) {
 		return found, rerr
 	}
 	return found, nil
+}
+
+// ParseCallback は手動ログインのリダイレクト先 URL から code と state を取り出す。
+// 完全な URL のほか、"?code=..." や "code=...&state=..." のようなクエリ文字列も受け付ける。
+// 形式が不正なら err を、ユーザーが拒否したなら denied を返す。
+func ParseCallback(raw string) (code, state string, denied, err error) {
+	raw = strings.TrimSpace(raw)
+	var q url.Values
+	if u, uerr := url.Parse(raw); uerr == nil && u.RawQuery != "" {
+		q = u.Query()
+	} else {
+		trimmed := strings.TrimPrefix(raw, "?")
+		q, err = url.ParseQuery(trimmed)
+		if err != nil {
+			return "", "", nil, errors.New("the callback is neither a URL nor a query string")
+		}
+	}
+	if e := q.Get("error"); e != "" {
+		d := q.Get("error_description")
+		if d != "" {
+			return "", "", fmt.Errorf("authorization was denied (%s: %s)", e, d), nil
+		}
+		return "", "", fmt.Errorf("authorization was denied (%s)", e), nil
+	}
+	if q.Get("code") == "" {
+		return "", "", nil, errors.New("no code in the callback")
+	}
+	return q.Get("code"), q.Get("state"), nil, nil
 }

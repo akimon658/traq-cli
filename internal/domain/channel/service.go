@@ -2,61 +2,45 @@ package channel
 
 import (
 	"context"
-	"net/http"
 	"strings"
 	"uuid"
 
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // Service はチャンネル操作に必要な常駐依存を束ねる。
-// 通信路と認証は構築時に固定し、要求ごとの認証情報はメソッド引数で受ける。
+// 認証済みクライアントを構築時に固定し、要求ごとの値はメソッド引数で受ける。
 type Service struct {
-	client *client.Client
-	auth   *auth.Service
+	api *traq.Client
 }
 
 // NewService はチャンネルサービスを作る。
-func NewService(client *client.Client, auth *auth.Service) *Service {
+func NewService(api *traq.Client) *Service {
 	return &Service{
-		client: client,
-		auth:   auth,
+		api: api,
 	}
 }
 
 // ResolveChannel はチャンネル指定 (UUID または "#general/a/b" 形式のパス) を ID に解決する。
 func (s *Service) ResolveChannel(
 	ctx context.Context,
-	rt *auth.ResolvedToken,
 	target string,
 ) (string, error) {
 	if _, err := uuid.Parse(target); err == nil {
 		return target, nil
 	}
-	if rt.Token.LacksScope(auth.ScopeRead) {
-		return "", auth.RequireScope(rt, auth.ScopeRead)
-	}
 	path := strings.TrimPrefix(target, "#")
-	var channelID string
-	err := s.auth.Exec(
-		ctx,
-		rt,
-		func(ctx context.Context) (*http.Response, error) {
-			list, resp, apiErr := s.client.GetChannels(ctx, true)
-			if apiErr != nil {
-				return resp, apiErr
-			}
-			channelID, apiErr = FindByPath(list, path)
-			return resp, apiErr
-		},
-	)
+	list, err := s.api.GetChannels(ctx, true)
 	if err != nil {
 		return "", err
+	}
+	channelID, err := FindByPath(list, path)
+	if err != nil {
+		return "", exit.GeneralError(err)
 	}
 	if channelID == "" {
 		return "", exit.Generalf("channel not found: %s", target)
@@ -67,22 +51,9 @@ func (s *Service) ResolveChannel(
 // FetchUnreadGroups は未読情報を取得し、表示用のグループに分類して返す。
 func (s *Service) FetchUnreadGroups(
 	ctx context.Context,
-	rt *auth.ResolvedToken,
 ) (Groups, error) {
-	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
-		return Groups{}, err
-	}
-	var unreads []traq.UnreadChannel
-	if err := s.auth.Exec(
-		ctx,
-		rt,
-		func(ctx context.Context) (*http.Response, error) {
-			var resp *http.Response
-			var apiErr error
-			unreads, resp, apiErr = s.client.GetMyUnreadChannels(ctx)
-			return resp, apiErr
-		},
-	); err != nil {
+	unreads, err := s.api.GetMyUnreadChannels(ctx)
+	if err != nil {
 		return Groups{}, err
 	}
 	if len(unreads) == 0 {
@@ -90,53 +61,26 @@ func (s *Service) FetchUnreadGroups(
 	}
 
 	// 最初の取得でトークンは検証/更新済みのため、残りの独立した3取得は並列化する。
-	// 各 goroutine はトークンのコピーを参照し、Exec 内の呼び出し元トークンへの書き戻しのデータ競合だけを避ける。
-	// s.auth/store は共有のため、並列中の同時401で同一 refresh token が複数回使われると2回目以降が失敗し得るが、最初の取得で検証済みのため可能性は低い。
-	var channelList *traq.ChannelList
-	var subs []traq.UserSubscribeState
+	// 各 goroutine はトークンのコピーを参照し、リトライ時の書き戻しのデータ競合だけを避ける。
+	// store は共有のため、並列中の同時401で同一 refresh token が複数回使われると2回目以降が失敗し得るが、最初の取得で検証済みのため可能性は低い。
+	var channelList *gotraq.ChannelList
+	var subs []gotraq.UserSubscribeState
 	var starIDs []string
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		tok := *rt.Token
-		rtLocal := &auth.ResolvedToken{Token: &tok, Source: rt.Source}
-		return s.auth.Exec(
-			gctx,
-			rtLocal,
-			func(ctx context.Context) (*http.Response, error) {
-				var resp *http.Response
-				var apiErr error
-				channelList, resp, apiErr = s.client.GetChannels(ctx, true)
-				return resp, apiErr
-			},
-		)
+		var err error
+		channelList, err = s.api.Clone().GetChannels(gctx, true)
+		return err
 	})
 	g.Go(func() error {
-		tok := *rt.Token
-		rtLocal := &auth.ResolvedToken{Token: &tok, Source: rt.Source}
-		return s.auth.Exec(
-			gctx,
-			rtLocal,
-			func(ctx context.Context) (*http.Response, error) {
-				var resp *http.Response
-				var apiErr error
-				subs, resp, apiErr = s.client.GetMyChannelSubscriptions(ctx)
-				return resp, apiErr
-			},
-		)
+		var err error
+		subs, err = s.api.Clone().GetMyChannelSubscriptions(gctx)
+		return err
 	})
 	g.Go(func() error {
-		tok := *rt.Token
-		rtLocal := &auth.ResolvedToken{Token: &tok, Source: rt.Source}
-		return s.auth.Exec(
-			gctx,
-			rtLocal,
-			func(ctx context.Context) (*http.Response, error) {
-				var resp *http.Response
-				var apiErr error
-				starIDs, resp, apiErr = s.client.GetMyStars(ctx)
-				return resp, apiErr
-			},
-		)
+		var err error
+		starIDs, err = s.api.Clone().GetMyStars(gctx)
+		return err
 	})
 	if err := g.Wait(); err != nil {
 		return Groups{}, err
@@ -157,17 +101,8 @@ func (s *Service) FetchUnreadGroups(
 		}
 	}
 	if needUsers {
-		var users []traq.User
-		if err := s.auth.Exec(
-			ctx,
-			rt,
-			func(ctx context.Context) (*http.Response, error) {
-				var resp *http.Response
-				var apiErr error
-				users, resp, apiErr = s.client.GetUsers(ctx)
-				return resp, apiErr
-			},
-		); err != nil {
+		users, err := s.api.GetUsers(ctx)
+		if err != nil {
 			return Groups{}, err
 		}
 		for _, u := range users {
@@ -175,7 +110,7 @@ func (s *Service) FetchUnreadGroups(
 		}
 	}
 
-	subLevels := make(map[string]traq.ChannelSubscribeLevel, len(subs))
+	subLevels := make(map[string]gotraq.ChannelSubscribeLevel, len(subs))
 	for _, sub := range subs {
 		subLevels[sub.ChannelId] = sub.Level
 	}

@@ -4,7 +4,6 @@ import (
 	"github.com/moznion/go-optional"
 	"github.com/spf13/cobra"
 
-	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/message"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
@@ -72,17 +71,12 @@ func newMessageSearchCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 			if err := message.ValidateSearchOptions(word, opts); err != nil {
 				return err
 			}
-			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
-			rt, err := authSvc.ResolveToken(
-				cmd.Context(),
-				e.TokenOverride,
-				e.AccessToken,
-			)
+			api, err := resolveClient(cmd, e)
 			if err != nil {
 				return err
 			}
-			res, err := message.NewService(authSvc.Client(), authSvc).
-				Search(cmd.Context(), &rt, word, opts)
+			res, err := message.NewService(api).
+				Search(cmd.Context(), word, opts)
 			if err != nil {
 				return err
 			}

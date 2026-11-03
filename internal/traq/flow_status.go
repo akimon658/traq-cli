@@ -1,4 +1,4 @@
-package auth
+package traq
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
@@ -57,9 +56,9 @@ func (s *Service) VerifyToken(
 	ctx context.Context,
 	accessToken string,
 ) (*traq.MyUserDetail, *http.Response, error) {
-	me, resp, err := s.client.GetMe(ctx, accessToken)
+	me, resp, err := s.api.MeAPI.GetMe(TokenContext(ctx, accessToken)).Execute()
 	if err != nil {
-		meErr := client.WrapError(err, resp)
+		meErr := WrapError(err, resp)
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			meErr = fmt.Errorf("the token was rejected: %v; run 'traq auth login'", meErr)
 		}

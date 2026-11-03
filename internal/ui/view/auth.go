@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akimon658/traq-cli/internal/auth"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // WriteAuthStatus は現在の認証状態を可読性の高いテキストで出力する。
-func WriteAuthStatus(w io.Writer, origin, source string, t auth.Token) error {
+func WriteAuthStatus(w io.Writer, origin, source string, t traq.Token) error {
 	lines := []string{
 		fmt.Sprintf("origin: %s", origin),
 		fmt.Sprintf("source: %s", source),
@@ -24,7 +24,7 @@ func WriteAuthStatus(w io.Writer, origin, source string, t auth.Token) error {
 	if t.UserID != "" {
 		lines = append(lines, fmt.Sprintf("userId: %s", t.UserID))
 	}
-	if t.Method == auth.MethodOAuth && len(t.Scope) > 0 {
+	if t.Method == traq.MethodOAuth && len(t.Scope) > 0 {
 		lines = append(lines, fmt.Sprintf("scopes: %s", strings.Join(t.Scope, ",")))
 	}
 	if !t.ExpiresAt.IsZero() {
@@ -35,12 +35,12 @@ func WriteAuthStatus(w io.Writer, origin, source string, t auth.Token) error {
 }
 
 // AuthStatusMethod は表示用の認証種別を返す。不明な場合は空文字。
-func AuthStatusMethod(t *auth.Token) string {
+func AuthStatusMethod(t *traq.Token) string {
 	if t.UserBot {
-		return string(auth.MethodBot)
+		return string(traq.MethodBot)
 	}
 	switch t.Method {
-	case auth.MethodBot, auth.MethodOAuth:
+	case traq.MethodBot, traq.MethodOAuth:
 		return string(t.Method)
 	default:
 		return ""
@@ -48,18 +48,18 @@ func AuthStatusMethod(t *auth.Token) string {
 }
 
 // MethodLabel は bot フラグと method から表示用ラベルを返す。
-func MethodLabel(m auth.Method, bot bool) string {
+func MethodLabel(m traq.Method, bot bool) string {
 	if bot {
 		return "bot"
 	}
-	if m == auth.MethodOAuth {
+	if m == traq.MethodOAuth {
 		return "user"
 	}
 	return "unknown"
 }
 
 // WriteLoginSuccess はトークン登録完了の1行を出力する。
-func WriteLoginSuccess(w io.Writer, t auth.Token, venue string) error {
+func WriteLoginSuccess(w io.Writer, t traq.Token, venue string) error {
 	_, err := fmt.Fprintf(
 		w,
 		"signed in: @%s (%s)\nstorage: %s\n",
@@ -71,7 +71,7 @@ func WriteLoginSuccess(w io.Writer, t auth.Token, venue string) error {
 }
 
 // WriteLoginSuccessWithScopes は OAuth ログイン完了の1行 (スコープ付き) を出力する。
-func WriteLoginSuccessWithScopes(w io.Writer, t auth.Token, venue string) error {
+func WriteLoginSuccessWithScopes(w io.Writer, t traq.Token, venue string) error {
 	_, err := fmt.Fprintf(
 		w,
 		"signed in: @%s (%s) scopes: %s\nstorage: %s\n",

@@ -5,17 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"uuid"
 
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // DownloadResult は保存したファイルの情報。
@@ -23,7 +21,7 @@ type DownloadResult struct {
 	FileID string
 	Path   string
 	Size   int64
-	Meta   traq.FileInfo
+	Meta   gotraq.FileInfo
 }
 
 // DownloadOptions はダウンロードの要求ごとの値。
@@ -34,17 +32,15 @@ type DownloadOptions struct {
 }
 
 // Service はファイル操作に必要な常駐依存を束ねる。
-// 通信路と認証は構築時に固定し、要求ごとの認証情報はメソッド引数で受ける。
+// 認証済みクライアントを構築時に固定し、要求ごとの値はメソッド引数で受ける。
 type Service struct {
-	client *client.Client
-	auth   *auth.Service
+	api *traq.Client
 }
 
 // NewService はファイルサービスを作る。
-func NewService(client *client.Client, auth *auth.Service) *Service {
+func NewService(api *traq.Client) *Service {
 	return &Service{
-		client: client,
-		auth:   auth,
+		api: api,
 	}
 }
 
@@ -64,7 +60,6 @@ func ValidateFileID(id string) error {
 // 親ディレクトリは自動作成しない。force が false のとき既存ファイルは上書きしない。
 func (s *Service) Download(
 	ctx context.Context,
-	rt *auth.ResolvedToken,
 	opts DownloadOptions,
 ) (DownloadResult, error) {
 	fileID := opts.FileID
@@ -73,21 +68,9 @@ func (s *Service) Download(
 	if err := ValidateFileID(fileID); err != nil {
 		return DownloadResult{}, err
 	}
-	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
-		return DownloadResult{}, err
-	}
 
-	var meta *traq.FileInfo
-	if err := s.auth.Exec(
-		ctx,
-		rt,
-		func(ctx context.Context) (*http.Response, error) {
-			var resp *http.Response
-			var apiErr error
-			meta, resp, apiErr = s.client.GetFileMeta(ctx, fileID)
-			return resp, apiErr
-		},
-	); err != nil {
+	meta, err := s.api.GetFileMeta(ctx, fileID)
+	if err != nil {
 		return DownloadResult{}, err
 	}
 	if meta == nil {
@@ -99,17 +82,8 @@ func (s *Service) Download(
 		return DownloadResult{}, err
 	}
 
-	var tmp *os.File
-	if err := s.auth.Exec(
-		ctx,
-		rt,
-		func(ctx context.Context) (*http.Response, error) {
-			var resp *http.Response
-			var apiErr error
-			tmp, resp, apiErr = s.client.GetFile(ctx, fileID)
-			return resp, apiErr
-		},
-	); err != nil {
+	tmp, err := s.api.GetFile(ctx, fileID)
+	if err != nil {
 		return DownloadResult{}, err
 	}
 	if tmp == nil {
