@@ -90,7 +90,8 @@ func (s *Service) FetchUnreadGroups(
 	}
 
 	// 最初の取得でトークンは検証/更新済みのため、残りの独立した3取得は並列化する。
-	// 万が一の401リトライ時の競合を避けるため、各 goroutine はトークンのコピーを参照する。
+	// 各 goroutine はトークンのコピーを参照し、Exec 内の呼び出し元トークンへの書き戻しのデータ競合だけを避ける。
+	// s.auth/store は共有のため、並列中の同時401で同一 refresh token が複数回使われると2回目以降が失敗し得るが、最初の取得で検証済みのため可能性は低い。
 	var channelList *traq.ChannelList
 	var subs []traq.UserSubscribeState
 	var starIDs []string
