@@ -34,10 +34,3 @@ type FinishRequest struct {
 	Verifier       string
 	FallbackScopes []string
 }
-
-// CodeExchange はトークン交換に必要な要求ごとの値。
-type CodeExchange struct {
-	RedirectURI string
-	Code        string
-	Verifier    string
-}

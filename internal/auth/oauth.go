@@ -22,7 +22,7 @@ type tokenResponse struct {
 
 func (s *Service) exchangeCode(
 	ctx context.Context,
-	req CodeExchange,
+	code, redirectURI, verifier string,
 ) (tokenResponse, error) {
 	if s.clientID == "" {
 		return tokenResponse{}, errors.New(
@@ -31,10 +31,10 @@ func (s *Service) exchangeCode(
 	}
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
-		"code":          {req.Code},
-		"redirect_uri":  {req.RedirectURI},
+		"code":          {code},
+		"redirect_uri":  {redirectURI},
 		"client_id":     {s.clientID},
-		"code_verifier": {req.Verifier},
+		"code_verifier": {verifier},
 	}
 	return requestToken(ctx, s.origin, form)
 }

@@ -75,11 +75,7 @@ func (s *Service) FinishLogin(
 	ctx context.Context,
 	req FinishRequest,
 ) (Token, string, error) {
-	resp, err := s.exchangeCode(ctx, CodeExchange{
-		RedirectURI: req.RedirectURI,
-		Code:        req.Code,
-		Verifier:    req.Verifier,
-	})
+	resp, err := s.exchangeCode(ctx, req.Code, req.RedirectURI, req.Verifier)
 	if err != nil {
 		return Token{}, "", err
 	}
