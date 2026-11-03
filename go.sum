@@ -389,8 +389,8 @@ github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea h1:SXhTLE6pb6eld/
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea/go.mod h1:WPnis/6cRcDZSUvVmezrxJPkiO87ThFYsoUiMwWNDJk=
 github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab h1:H6aJ0yKQ0gF49Qb2z5hI1UHxSQt4JMyxebFR15KnApw=
 github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab/go.mod h1:ulncasL3N9uLrVann0m+CDlJKWsIAP34MPcOJF6VRvc=
-github.com/traPtitech/go-traq v0.0.0-20260820123008-a8cecf494070 h1:G+yOZehXL6qaia4nl5Q9CP3v67YjvhXDS4PGcyOKEF0=
-github.com/traPtitech/go-traq v0.0.0-20260820123008-a8cecf494070/go.mod h1:D7NRbLYlvMey05bV+3Yqea6+Onj0ACmMgLuvP7+far8=
+github.com/traPtitech/go-traq v0.0.0-20261026061505-75237f7bff71 h1:xq4Bt2fpCebd41FT7foE6nO0YHfAN23YFN6ud0TIhwU=
+github.com/traPtitech/go-traq v0.0.0-20261026061505-75237f7bff71/go.mod h1:D7NRbLYlvMey05bV+3Yqea6+Onj0ACmMgLuvP7+far8=
 github.com/transparency-dev/formats v0.1.1 h1:4bVHJc+KdBgpA1OJD1yjI+g0i5Z1graCppTMH8lWKJI=
 github.com/transparency-dev/formats v0.1.1/go.mod h1:qtZ8goRuJ8FTBG9c9+Bj0rn2rUG7eG/AUTkr+Aw3jFw=
 github.com/transparency-dev/merkle v0.0.2 h1:Q9nBoQcZcgPamMkGn7ghV8XiTZ/kRxn1yCG81+twTK4=
