@@ -6,7 +6,6 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/message"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/ui/view"
@@ -73,27 +72,38 @@ func newMessageSearchCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 			if err := message.ValidateSearchOptions(word, opts); err != nil {
 				return err
 			}
-			rt, err := auth.ResolveToken(
+			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+			rt, err := authSvc.ResolveToken(
 				cmd.Context(),
-				e.Origin,
-				e.ClientID,
 				e.TokenOverride,
 				e.AccessToken,
-				e.LoadStore(),
 			)
 			if err != nil {
 				return err
 			}
-			c := client.New(e.Origin)
-			res, err := message.Search(cmd.Context(), e, &rt, c, word, opts)
+			res, err := message.NewService(authSvc.Client(), authSvc).
+				Search(cmd.Context(), &rt, word, opts)
 			if err != nil {
 				return err
 			}
-			return view.WriteMessageList(cmd.OutOrStdout(), view.NewSearchView(
-				res.Label, res.Limit, res.Offset, res.Sort, res.TotalHits,
-				res.Msgs, res.Users, res.Stamps, res.Loc, res.Origin, res.Quoted, res.Files,
-				res.SelfID, res.MyGroups,
-			))
+			return view.WriteMessageList(cmd.OutOrStdout(), view.SearchViewParams{
+				Label:     res.Label,
+				Limit:     res.Limit,
+				Offset:    res.Offset,
+				Sort:      res.Sort,
+				TotalHits: res.TotalHits,
+				Msgs:      res.Msgs,
+				CommonParams: view.CommonParams{
+					Users:    res.Users,
+					Stamps:   res.Stamps,
+					Loc:      res.Loc,
+					Origin:   res.Origin,
+					Quoted:   res.Quoted,
+					Files:    res.Files,
+					SelfID:   res.SelfID,
+					MyGroups: res.MyGroups,
+				},
+			}.Build())
 		},
 	}
 	searchCmd.Flags().StringVar(&in, "in", "", "検索対象チャンネル (UUID または #パス)")

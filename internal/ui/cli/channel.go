@@ -5,7 +5,6 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/channel"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/ui/view"
@@ -36,19 +35,17 @@ func newChannelUnreadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			rt, err := auth.ResolveToken(
+			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+			rt, err := authSvc.ResolveToken(
 				cmd.Context(),
-				e.Origin,
-				e.ClientID,
 				e.TokenOverride,
 				e.AccessToken,
-				e.LoadStore(),
 			)
 			if err != nil {
 				return err
 			}
-			c := client.New(e.Origin)
-			groups, err := channel.FetchUnreadGroups(cmd.Context(), e, &rt, c)
+			groups, err := channel.NewService(authSvc.Client(), authSvc).
+				FetchUnreadGroups(cmd.Context(), &rt)
 			if err != nil {
 				return err
 			}

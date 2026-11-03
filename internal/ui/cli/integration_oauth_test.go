@@ -19,7 +19,6 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/client"
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
@@ -96,7 +95,10 @@ func browserSim(
 			}
 			// コールバックサーバーにノイズを送り、CLI を即座にエラー終了させる
 			if redirectURI != "" {
-				_, _ = requestNoRedirect(t, http.MethodGet, redirectURI, nil, nil)
+				_, _ = requestNoRedirect(t, noRedirectRequest{
+					method: http.MethodGet,
+					url:    redirectURI,
+				})
 			}
 		}()
 		if err != nil {
@@ -107,7 +109,11 @@ func browserSim(
 		require.NotEmpty(t, redirectURI, "no redirect_uri in the authorize URL")
 
 		// (1) 認可リクエスト
-		authzResp, authzBody := requestNoRedirect(t, http.MethodGet, authorizeURL, sess, nil)
+		authzResp, authzBody := requestNoRedirect(t, noRedirectRequest{
+			method: http.MethodGet,
+			url:    authorizeURL,
+			sess:   sess,
+		})
 		if authzResp.StatusCode != http.StatusFound {
 			obs.err = fmt.Errorf(
 				"authorize returned %d, expected 302: %s", authzResp.StatusCode, authzBody,
@@ -120,10 +126,12 @@ func browserSim(
 		assert.Contains(t, obs.consentLocation, "state="+state)
 
 		// (2) 同意フォームの送信 (CSRF は無いためセッションクッキーだけで送れる)
-		decideResp, decideBody := requestNoRedirect(
-			t, http.MethodPost, aURL.Scheme+"://"+aURL.Host+"/api/v3/oauth2/authorize/decide",
-			sess, url.Values{"submit": {submit}},
-		)
+		decideResp, decideBody := requestNoRedirect(t, noRedirectRequest{
+			method: http.MethodPost,
+			url:    aURL.Scheme + "://" + aURL.Host + "/api/v3/oauth2/authorize/decide",
+			sess:   sess,
+			form:   url.Values{"submit": {submit}},
+		})
 		if decideResp.StatusCode != http.StatusFound {
 			obs.err = fmt.Errorf(
 				"decide returned %d, expected 302: %s", decideResp.StatusCode, decideBody,
@@ -147,7 +155,10 @@ func browserSim(
 		}
 
 		// (3) リダイレクト先を辿って code / error を traq-cli のコールバックサーバーに届ける
-		callbackResp, callbackBody := requestNoRedirect(t, http.MethodGet, decision, nil, nil)
+		callbackResp, callbackBody := requestNoRedirect(t, noRedirectRequest{
+			method: http.MethodGet,
+			url:    decision,
+		})
 		wantStatus := http.StatusOK
 		if submit != "approve" {
 			wantStatus = http.StatusBadRequest
@@ -167,26 +178,28 @@ type loginResult struct {
 	sim *simObservations
 }
 
-// driveOAuthLogin は `traq auth login --browser` 相当の OAuth フローを実行し、
+// oauthDriver はブラウザログイン統合テストに必要な常駐依存を束ねる。
+type oauthDriver struct {
+	clientID string
+	sess     *http.Cookie
+	store    *auth.MockStore
+}
+
+// drive は `traq auth login --browser` 相当の OAuth フローを実行し、
 // CLI の出力・エラーとブラウザ役シミュレーションの観測結果を返す。
-func driveOAuthLogin(
+func (d oauthDriver) drive(
 	t *testing.T,
-	clientID string,
-	sess *http.Cookie,
-	ms *auth.MockStore,
 	scopeFlag, submit string,
 ) loginResult {
 	t.Helper()
 	obs := &simObservations{}
 	var res loginResult
 	var buf bytes.Buffer
-	res.err = runBrowserLogin(
-		t.Context(),
-		&config.Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms},
-		scopeFlag,
-		browserSim(t, sess, submit, obs),
-		&buf,
-	)
+	res.err = browserLogin{
+		svc:         auth.NewService(testTraqOrigin, d.clientID, d.store, nil),
+		openBrowser: browserSim(t, d.sess, submit, obs),
+		out:         &buf,
+	}.run(t.Context(), scopeFlag)
 	res.out = buf.String()
 	res.sim = obs
 	return res
@@ -210,7 +223,9 @@ func TestAuthLoginBrowserRead(t *testing.T) {
 		}).Times(2),
 	)
 
-	res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "approve")
+	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+		t, auth.ScopeRead, "approve",
+	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 	assert.Contains(t, res.out, "signed in: @traq (user) scopes: read")
@@ -258,7 +273,9 @@ func TestAuthLoginBrowserWrite(t *testing.T) {
 		}).Times(1),
 	)
 
-	res := driveOAuthLogin(t, clientID, sess, ms, "read,write", "approve")
+	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+		t, "read,write", "approve",
+	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 	assert.Contains(t, res.out, "signed in: @traq (user) scopes: read,write")
@@ -279,7 +296,9 @@ func TestAuthLoginBrowserDenied(t *testing.T) {
 	// Save への期待値を設定しない: Save が呼ばれたら gomock がテストを失敗させる
 	ms := auth.NewMockStore(gomock.NewController(t))
 
-	res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "deny")
+	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+		t, auth.ScopeRead, "deny",
+	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.Error(t, res.err, "denied authorization should fail the login, output: %s", res.out)
 	assert.Contains(t, res.err.Error(), "authorization was denied (access_denied)")
@@ -297,7 +316,9 @@ func TestAuthLoginTokenOAuthType(t *testing.T) {
 		return "keychain", nil
 	}).Times(2)
 
-	res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "approve")
+	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+		t, auth.ScopeRead, "approve",
+	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 	require.Len(t, saves, 1)
@@ -333,7 +354,9 @@ func TestAuthStatusOAuth(t *testing.T) {
 		}).Times(1),
 	)
 
-	res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "approve")
+	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+		t, auth.ScopeRead, "approve",
+	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 
@@ -372,7 +395,9 @@ func TestAuthLogoutOAuth(t *testing.T) {
 		ms.EXPECT().Delete().Return(true, nil).Times(1),
 	)
 
-	res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "approve")
+	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+		t, auth.ScopeRead, "approve",
+	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 	require.NotEmpty(t, saved.AccessToken)
@@ -410,7 +435,9 @@ func TestAuthOAuthRefresh(t *testing.T) {
 			}).Times(1),
 		)
 
-		res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "approve")
+		res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+			t, auth.ScopeRead, "approve",
+		)
 		require.NoError(t, res.sim.err, "the browser simulation failed")
 		require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 		require.NotEmpty(t, loggedIn.RefreshToken)
@@ -450,7 +477,9 @@ func TestAuthOAuthRefresh(t *testing.T) {
 			}).Times(1),
 		)
 
-		res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "approve")
+		res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+			t, auth.ScopeRead, "approve",
+		)
 		require.NoError(t, res.sim.err, "the browser simulation failed")
 		require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 		require.NotEmpty(t, loggedIn.RefreshToken)
@@ -466,6 +495,14 @@ func TestAuthOAuthRefresh(t *testing.T) {
 	})
 }
 
+// noRedirectRequest はリダイレクト追従なしリクエストの入力を束ねる。
+type noRedirectRequest struct {
+	method string
+	url    string
+	sess   *http.Cookie
+	form   url.Values
+}
+
 // requestNoRedirect はリダイレクトを追従せずに HTTP リクエストを送り、
 // レスポンスと body を返す。
 //
@@ -474,24 +511,22 @@ func TestAuthOAuthRefresh(t *testing.T) {
 // traQ API クライアントである go-traq ではなく net/http を直接用いる。
 func requestNoRedirect(
 	t *testing.T,
-	method, reqURL string,
-	sess *http.Cookie,
-	form url.Values,
+	req noRedirectRequest,
 ) (*http.Response, string) {
 	t.Helper()
 	var body io.Reader
-	if form != nil {
-		body = strings.NewReader(form.Encode())
+	if req.form != nil {
+		body = strings.NewReader(req.form.Encode())
 	}
-	req, err := http.NewRequestWithContext(t.Context(), method, reqURL, body)
+	httpReq, err := http.NewRequestWithContext(t.Context(), req.method, req.url, body)
 	require.NoError(t, err)
-	if form != nil {
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if req.form != nil {
+		httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
-	if sess != nil {
-		req.AddCookie(sess)
+	if req.sess != nil {
+		httpReq.AddCookie(req.sess)
 	}
-	resp, err := noRedirectClient.Do(req)
+	resp, err := noRedirectClient.Do(httpReq)
 	require.NoError(t, err)
 	raw, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -584,7 +619,9 @@ func TestMessageListUnreadOnly(t *testing.T) {
 			return saved, "keychain", true, nil
 		}).Times(3),
 	)
-	res := driveOAuthLogin(t, clientID, sess, ms, auth.ScopeRead, "approve")
+	res := oauthDriver{clientID: clientID, sess: sess, store: ms}.drive(
+		t, auth.ScopeRead, "approve",
+	)
 	require.NoError(t, res.sim.err, "the browser simulation failed")
 	require.NoError(t, res.err, "browser login failed, output: %s", res.out)
 	e := overrideEnv(t, ms, clientID)

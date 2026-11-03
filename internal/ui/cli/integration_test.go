@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 	auth.LoginTimeout = 30 * time.Second
 
 	ctx := context.Background()
-	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles("../../compose.yaml"))
+	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles("../../../compose.yaml"))
 	if err != nil {
 		panic(fmt.Sprintf("failed to create compose stack: %v", err))
 	}

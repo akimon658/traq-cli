@@ -7,7 +7,6 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/message"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/ui/view"
@@ -39,26 +38,34 @@ func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			rt, err := auth.ResolveToken(
+			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+			rt, err := authSvc.ResolveToken(
 				cmd.Context(),
-				e.Origin,
-				e.ClientID,
 				e.TokenOverride,
 				e.AccessToken,
-				e.LoadStore(),
 			)
 			if err != nil {
 				return err
 			}
-			c := client.New(e.Origin)
-			res, err := message.Send(cmd.Context(), e, &rt, c, args[0], strings.Join(args[1:], " "))
+			res, err := message.NewService(authSvc.Client(), authSvc).Send(
+				cmd.Context(), &rt, args[0], strings.Join(args[1:], " "),
+			)
 			if err != nil {
 				return err
 			}
-			return view.WriteSingleMessage(cmd.OutOrStdout(), view.NewSingleView(
-				res.Msg, res.Users, res.Stamps, res.Loc, res.Origin, res.Quoted, res.Files,
-				res.SelfID, res.MyGroups,
-			))
+			return view.WriteSingleMessage(cmd.OutOrStdout(), view.SingleViewParams{
+				Msg: res.Msg,
+				CommonParams: view.CommonParams{
+					Users:    res.Users,
+					Stamps:   res.Stamps,
+					Loc:      res.Loc,
+					Origin:   res.Origin,
+					Quoted:   res.Quoted,
+					Files:    res.Files,
+					SelfID:   res.SelfID,
+					MyGroups: res.MyGroups,
+				},
+			}.Build())
 		},
 	}
 	messageCmd.AddCommand(
@@ -118,28 +125,39 @@ bot トークンでは未読が生成されないため、常に未読0件にな
 			if err := message.ValidateListOptions(opts); err != nil {
 				return err
 			}
-			rt, err := auth.ResolveToken(
+			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+			rt, err := authSvc.ResolveToken(
 				cmd.Context(),
-				e.Origin,
-				e.ClientID,
 				e.TokenOverride,
 				e.AccessToken,
-				e.LoadStore(),
 			)
 			if err != nil {
 				return err
 			}
-			c := client.New(e.Origin)
-			res, err := message.List(cmd.Context(), e, &rt, c, args[0], opts)
+			res, err := message.NewService(authSvc.Client(), authSvc).
+				List(cmd.Context(), &rt, args[0], opts)
 			if err != nil {
 				return err
 			}
-			return view.WriteMessageList(cmd.OutOrStdout(), view.NewListView(
-				res.Label, res.Limit, res.Offset, res.Order,
-				res.Msgs, res.Users, res.Stamps, res.Loc,
-				res.Unread, res.UnreadOnly, res.Origin, res.Quoted, res.Files,
-				res.SelfID, res.MyGroups,
-			))
+			return view.WriteMessageList(cmd.OutOrStdout(), view.ListViewParams{
+				Label:      res.Label,
+				Limit:      res.Limit,
+				Offset:     res.Offset,
+				Order:      res.Order,
+				Msgs:       res.Msgs,
+				Unread:     res.Unread,
+				UnreadOnly: res.UnreadOnly,
+				CommonParams: view.CommonParams{
+					Users:    res.Users,
+					Stamps:   res.Stamps,
+					Loc:      res.Loc,
+					Origin:   res.Origin,
+					Quoted:   res.Quoted,
+					Files:    res.Files,
+					SelfID:   res.SelfID,
+					MyGroups: res.MyGroups,
+				},
+			}.Build())
 		},
 	}
 	listCmd.Flags().IntVar(&limit, "limit", defaultListLimit, "取得する件数")

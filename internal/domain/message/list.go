@@ -12,16 +12,13 @@ import (
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/channel"
 	"github.com/akimon658/traq-cli/internal/foundation/client"
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
 // List はチャンネルのメッセージ一覧を取得する。
-func List(
+func (s *Service) List(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 	target string,
 	opts ListOptions,
 ) (ListResult, error) {
@@ -40,7 +37,7 @@ func List(
 	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
 		return ListResult{}, err
 	}
-	channelID, err := channel.ResolveChannel(ctx, e, rt, c, target)
+	channelID, err := s.channel.ResolveChannel(ctx, rt, target)
 	if err != nil {
 		return ListResult{}, err
 	}
@@ -55,16 +52,13 @@ func List(
 	)
 	if opts.UnreadOnly {
 		var list []traq.UnreadChannel
-		if err := auth.Exec(
+		if err := s.auth.Exec(
 			ctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rt,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
 				var apiErr error
-				list, resp, apiErr = c.GetMyUnreadChannels(ctx)
+				list, resp, apiErr = s.client.GetMyUnreadChannels(ctx)
 				return resp, apiErr
 			},
 		); err != nil {
@@ -80,8 +74,8 @@ func List(
 				)
 			}
 			// --unread-only と --since は範囲の交差として新しい方を採用する。
-			if s, terr := since.Take(); terr == nil && s.After(u.Since) {
-				u.Since = s
+			if sinceTime, terr := since.Take(); terr == nil && sinceTime.After(u.Since) {
+				u.Since = sinceTime
 			}
 			effectiveSince = optional.Some(u.Since)
 			effectiveInclusive = true
@@ -93,15 +87,12 @@ func List(
 	var msgs []traq.Message
 	// 未読が無い場合 (--unread-only の未読0件) はメッセージを取得せず表示のみ行う。
 	if !opts.UnreadOnly || unread.IsSome() {
-		if err := auth.Exec(
+		if err := s.auth.Exec(
 			ctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rt,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
-				msgs, resp, err = c.GetChannelMessages(ctx, channelID, client.MessageQuery{
+				msgs, resp, err = s.client.GetChannelMessages(ctx, channelID, client.MessageQuery{
 					Limit:     int32(opts.Limit),
 					Offset:    int32(opts.Offset),
 					Since:     effectiveSince,
@@ -122,7 +113,7 @@ func List(
 		MyGroups: map[string]struct{}{},
 	}
 	if len(msgs) > 0 {
-		enrich, err = FetchEnrichment(ctx, e, rt, c, contentsOf(msgs))
+		enrich, err = s.FetchEnrichment(ctx, rt, contentsOf(msgs))
 		if err != nil {
 			return ListResult{}, err
 		}
@@ -132,16 +123,13 @@ func List(
 	// --unread-only 時は取得済みなのでスキップする。
 	if opts.ShowUnread && !opts.UnreadOnly {
 		var list []traq.UnreadChannel
-		uerr := auth.Exec(
+		uerr := s.auth.Exec(
 			ctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rt,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
 				var apiErr error
-				list, resp, apiErr = c.GetMyUnreadChannels(ctx)
+				list, resp, apiErr = s.client.GetMyUnreadChannels(ctx)
 				return resp, apiErr
 			},
 		)
@@ -165,7 +153,7 @@ func List(
 		Loc:        time.Local,
 		Unread:     unread,
 		UnreadOnly: opts.UnreadOnly,
-		Origin:     e.Origin,
+		Origin:     s.origin(),
 	}, nil
 }
 

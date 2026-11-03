@@ -93,7 +93,7 @@ func (s *CallbackServer) handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func AuthorizeURL(origin, clientID, redirectURI string, scopes []string, pk PKCE) string {
+func (pk PKCE) AuthorizeURL(origin, clientID, redirectURI string, scopes []string) string {
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {clientID},

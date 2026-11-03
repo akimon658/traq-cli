@@ -34,12 +34,11 @@ func TestAuthorizeURL(t *testing.T) {
 		Challenge: "challenge123",
 		State:     "state123",
 	}
-	got := AuthorizeURL(
+	got := pk.AuthorizeURL(
 		"https://q.trap.jp",
 		"client-id",
 		"http://127.0.0.1:1234/callback",
 		[]string{"read", "write"},
-		pk,
 	)
 	for _, want := range []string{
 		"https://q.trap.jp/api/v3/oauth2/authorize?",

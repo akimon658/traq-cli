@@ -20,11 +20,11 @@ type tokenResponse struct {
 	Scope        string `json:"scope,omitempty"`
 }
 
-func ExchangeCode(
+func (s *Service) exchangeCode(
 	ctx context.Context,
-	origin, clientID, redirectURI, code, verifier string,
+	code, redirectURI, verifier string,
 ) (tokenResponse, error) {
-	if clientID == "" {
+	if s.clientID == "" {
 		return tokenResponse{}, errors.New(
 			"OAuth client ID is not configured; run `traq auth login --browser` after setting TRAQ_CLIENT_ID or --client-id (see docs/auth.md)",
 		)
@@ -33,17 +33,19 @@ func ExchangeCode(
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"redirect_uri":  {redirectURI},
-		"client_id":     {clientID},
+		"client_id":     {s.clientID},
 		"code_verifier": {verifier},
 	}
-	return requestToken(ctx, origin, form)
+	return requestToken(ctx, s.origin, form)
 }
 
-func Refresh(ctx context.Context, origin, clientID string, prev Token) (Token, error) {
+// Refresh は OAuth トークンを更新する。
+// 保存トークンに記録された Origin を優先し、無ければ Service の origin を使う。
+func (s *Service) Refresh(ctx context.Context, prev Token) (Token, error) {
 	if prev.RefreshToken == "" {
 		return Token{}, errors.New("no refresh token available")
 	}
-	if clientID == "" {
+	if s.clientID == "" {
 		return Token{}, errors.New(
 			"OAuth client ID is not configured; set TRAQ_CLIENT_ID or --client-id (see docs/auth.md)",
 		)
@@ -51,9 +53,9 @@ func Refresh(ctx context.Context, origin, clientID string, prev Token) (Token, e
 	form := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {prev.RefreshToken},
-		"client_id":     {clientID},
+		"client_id":     {s.clientID},
 	}
-	resp, err := requestToken(ctx, origin, form)
+	resp, err := requestToken(ctx, prev.OriginOr(s.origin), form)
 	if err != nil {
 		return Token{}, err
 	}

@@ -14,14 +14,13 @@ import (
 )
 
 type Client struct {
-	API    *traq.APIClient
-	Origin string
+	API *traq.APIClient
 }
 
 func New(origin string) *Client {
 	cfg := traq.NewConfiguration()
 	cfg.Servers = traq.ServerConfigurations{{URL: origin + "/api/v3"}}
-	return &Client{API: traq.NewAPIClient(cfg), Origin: origin}
+	return &Client{API: traq.NewAPIClient(cfg)}
 }
 
 func TokenContext(ctx context.Context, token string) context.Context {

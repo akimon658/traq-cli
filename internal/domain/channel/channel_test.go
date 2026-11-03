@@ -58,7 +58,13 @@ func TestClassifyUnreads(t *testing.T) {
 	}
 	stars := map[string]bool{"c-star": true, "c-both": true}
 
-	g, err := Classify(unreads, pathMap, dmMap, userNames, subLevels, stars)
+	g, err := Tables{
+		Paths:     pathMap,
+		DM:        dmMap,
+		UserNames: userNames,
+		SubLevels: subLevels,
+		Stars:     stars,
+	}.Classify(unreads)
 	require.NoError(t, err)
 
 	require.Len(t, g.DM, 1)
@@ -83,13 +89,8 @@ func TestClassifyUnreads(t *testing.T) {
 func TestClassifyUnreadsErrors(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	_, err := Classify(
+	_, err := Tables{}.Classify(
 		[]traq.UnreadChannel{{ChannelId: "unknown", Count: 1, UpdatedAt: base}},
-		map[string]string{},
-		map[string]string{},
-		map[string]string{},
-		map[string]traq.ChannelSubscribeLevel{},
-		map[string]bool{},
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "channel not found")
@@ -98,13 +99,10 @@ func TestClassifyUnreadsErrors(t *testing.T) {
 func TestClassifyUnreadsDMUserNotFoundFallback(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	g, err := Classify(
+	g, err := Tables{
+		DM: map[string]string{"dm1": "u-missing"},
+	}.Classify(
 		[]traq.UnreadChannel{{ChannelId: "dm1", Count: 1, UpdatedAt: base}},
-		map[string]string{},
-		map[string]string{"dm1": "u-missing"},
-		map[string]string{},
-		map[string]traq.ChannelSubscribeLevel{},
-		map[string]bool{},
 	)
 	require.NoError(t, err)
 	require.Len(t, g.DM, 1)

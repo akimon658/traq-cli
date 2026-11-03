@@ -15,7 +15,6 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/client"
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
@@ -25,6 +24,28 @@ type DownloadResult struct {
 	Path   string
 	Size   int64
 	Meta   traq.FileInfo
+}
+
+// DownloadOptions はダウンロードの要求ごとの値。
+type DownloadOptions struct {
+	FileID string
+	Out    string
+	Force  bool
+}
+
+// Service はファイル操作に必要な常駐依存を束ねる。
+// 通信路と認証は構築時に固定し、要求ごとの認証情報はメソッド引数で受ける。
+type Service struct {
+	client *client.Client
+	auth   *auth.Service
+}
+
+// NewService はファイルサービスを作る。
+func NewService(client *client.Client, auth *auth.Service) *Service {
+	return &Service{
+		client: client,
+		auth:   auth,
+	}
 }
 
 const downloadedFilePerm = 0o666
@@ -41,14 +62,14 @@ func ValidateFileID(id string) error {
 // out が空ならカレントディレクトリに元のファイル名で保存する。
 // out が既存のディレクトリならその中に元のファイル名で保存する。
 // 親ディレクトリは自動作成しない。force が false のとき既存ファイルは上書きしない。
-func Download(
+func (s *Service) Download(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
-	fileID, out string,
-	force bool,
+	opts DownloadOptions,
 ) (DownloadResult, error) {
+	fileID := opts.FileID
+	out := opts.Out
+	force := opts.Force
 	if err := ValidateFileID(fileID); err != nil {
 		return DownloadResult{}, err
 	}
@@ -57,16 +78,13 @@ func Download(
 	}
 
 	var meta *traq.FileInfo
-	if err := auth.Exec(
+	if err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
 			var apiErr error
-			meta, resp, apiErr = c.GetFileMeta(ctx, fileID)
+			meta, resp, apiErr = s.client.GetFileMeta(ctx, fileID)
 			return resp, apiErr
 		},
 	); err != nil {
@@ -82,16 +100,13 @@ func Download(
 	}
 
 	var tmp *os.File
-	if err := auth.Exec(
+	if err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
 			var apiErr error
-			tmp, resp, apiErr = c.GetFile(ctx, fileID)
+			tmp, resp, apiErr = s.client.GetFile(ctx, fileID)
 			return resp, apiErr
 		},
 	); err != nil {
