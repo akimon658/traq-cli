@@ -110,9 +110,7 @@ func (s *Service) CompleteManualLogin(
 	if sess.ClientID != "" {
 		sessClientID = sess.ClientID
 	}
-	finishSvc := *s
-	finishSvc.origin = sessOrigin
-	finishSvc.clientID = sessClientID
+	finishSvc := NewService(sessOrigin, sessClientID, s.store, s.sessions)
 	t, venue, err := finishSvc.FinishLogin(
 		ctx,
 		FinishRequest{
