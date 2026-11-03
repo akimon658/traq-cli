@@ -14,7 +14,7 @@ import (
 )
 
 // MessageList はメッセージ表示に必要な情報をまとめた DTO。
-// list / search / send で共有する。コンストラクタ (NewListView 等) 経由での構築を推奨する。
+// list / search / send で共有する。ListViewParams.Build() 等経由での構築を推奨する。
 type MessageList struct {
 	Label  string
 	Limit  int
