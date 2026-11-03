@@ -107,35 +107,35 @@ func runLogin(cmd *cobra.Command, newEnv func() *config.Env, flags *globalFlags)
 	if !browser {
 		return exit.UsageError(errors.New("specify either --browser, --manual or --token <TOKEN>"))
 	}
-	return BrowserLogin{
-		Env:         e,
-		OpenBrowser: openBrowser,
-		Out:         cmd.OutOrStdout(),
-	}.Run(cmd.Context(), scopeFlag)
+	return browserLogin{
+		env:         e,
+		openBrowser: openBrowser,
+		out:         cmd.OutOrStdout(),
+	}.run(cmd.Context(), scopeFlag)
 }
 
-// BrowserLogin はブラウザログインに必要な常駐依存を束ねる。
-type BrowserLogin struct {
-	Env         *config.Env
-	OpenBrowser func(string)
-	Out         io.Writer
+// browserLogin はブラウザログインに必要な常駐依存を束ねる。
+type browserLogin struct {
+	env         *config.Env
+	openBrowser func(string)
+	out         io.Writer
 }
 
-// Run はブラウザログインを実行する。
-func (b BrowserLogin) Run(
+// run はブラウザログインを実行する。
+func (b browserLogin) run(
 	ctx context.Context,
 	scopeFlag string,
 ) error {
-	e := b.Env
+	e := b.env
 	sess, err := auth.PrepareBrowserLogin(e.Origin, e.ClientID, scopeFlag)
 	if err != nil {
 		return err
 	}
 	defer sess.Callback.Close()
-	if err := view.WriteBrowserInstructions(b.Out, sess.AuthorizeURL); err != nil {
+	if err := view.WriteBrowserInstructions(b.out, sess.AuthorizeURL); err != nil {
 		return err
 	}
-	b.OpenBrowser(sess.AuthorizeURL)
+	b.openBrowser(sess.AuthorizeURL)
 	ctx, cancel := context.WithTimeout(ctx, auth.LoginTimeout)
 	defer cancel()
 	code, err := sess.Callback.Wait(ctx)
@@ -155,7 +155,7 @@ func (b BrowserLogin) Run(
 	if err != nil {
 		return err
 	}
-	return view.WriteLoginSuccessWithScopes(b.Out, t, venue)
+	return view.WriteLoginSuccessWithScopes(b.out, t, venue)
 }
 
 func runManualLogin(e *config.Env, scopeFlag string, out io.Writer) error {
