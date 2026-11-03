@@ -37,18 +37,18 @@ foundation/config → auth (Store/Token 型の保持)
 
 - `foundation`: 横断的基盤。`exit` / `client` / `text` は無依存、`config` は `auth` の型を保持する
 - `auth` は認証関心を集約する。依存は `foundation` のみで、`config` を import しない。
-  必要な値 (`origin` / `clientID` / `store`) は ResolveToken / Exec 等の明示引数で受け取る
+  必要な値 (`origin` など) は `NewService` で受け取り `Service` に固定し、`ResolveToken` / `Exec` 等は `Service` メソッドとして使う
 - `domain`: traQ ドメイン操作。`auth` + `foundation` のみに依存
 - `ui`: プレゼンテーション。`cli` (配線) と `view` (表示) を束ねる
 
 規約:
 
-- `ui/cli` は配線のみを担う。呼び出し順は フラグ検証 (usage 系) → `auth.ResolveToken` → ドメインサービス → `ui/view` とし、API 呼び出しや整形ロジックは持たない
+- `ui/cli` は配線のみを担う。呼び出し順は フラグ検証 (usage 系) → `Service.ResolveToken` → ドメインサービス → `ui/view` とし、API 呼び出しや整形ロジックは持たない
 - ドメインサービス (`domain/channel` / `domain/message` / `domain/user` / `domain/file`) はデータを返す。表示は `view` に任せ、`view` を import しない
 - ドメインサービスは `config.Env` を保持しない。必要な値 (`origin` / `client` / `auth`) はコンストラクタの明示引数で受け取る
 - `auth.Service` はコマンド毎に `ui/cli` で1個作り、ドメインサービス間で共有する。ドメイン内部で `auth.NewService` や `LoadStore` / `LoadSessions` を呼ばない。`message` が内包する `channel` も同一インスタンスを共有する
 - `ui/view` は `io.Writer` への出力だけを行い、API を呼ばない。入力型は `domain` / `auth` の型を参照する
-- `auth.Exec` が唯一の API 実行経路。401 時の refresh・保存・リトライはここに集約されており、呼び出し元は通常の API 呼び出しと同じ形で書ける
+- `Service.Exec` が唯一の API 実行経路。401 時の refresh・保存・リトライはここに集約されており、呼び出し元は通常の API 呼び出しと同じ形で書ける
 - 終了コードと `exit.Error` は `foundation/exit` が定義する。`auth` やドメインサービスはこれを返し、`ui/cli.Execute` がコードに変換する
 
 ## ドメインサービスの責務分界
@@ -64,7 +64,7 @@ foundation/config → auth (Store/Token 型の保持)
 ## 実行フロー
 
 ```
-foundation/config (Env 解決) → auth (トークン解決) → ドメインサービス (auth.Exec 経由) → ui/view
+foundation/config (Env 解決) → auth (トークン解決) → ドメインサービス (Service.Exec 経由) → ui/view
 ```
 
 トークンの解決順・スコープ検査・401 時の更新とリトライは `auth.md` に従う。
