@@ -8,6 +8,9 @@ linters:
   settings:
     revive:
       rules:
+        - name: argument-limit
+          severity: error
+          arguments: [4]
         - name: unused-parameter
           severity: error
     usetesting:

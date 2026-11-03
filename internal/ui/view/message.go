@@ -42,72 +42,74 @@ type MessageList struct {
 	MyGroups map[string]struct{}
 }
 
-// NewListView は list / unread-only 表示用の MessageList を作る。
-func NewListView(
-	label string,
-	limit, offset int,
-	order string,
-	msgs []traq.Message,
-	users map[string]traq.User,
-	stamps map[string]string,
-	loc *time.Location,
-	unread optional.Option[traq.UnreadChannel],
-	unreadOnly bool,
-	origin string,
-	quoted map[string]traq.Message,
-	files map[string]traq.FileInfo,
-	selfID string,
-	myGroups map[string]struct{},
-) MessageList {
+// CommonParams は表示に共通の付随情報を束ねる。
+type CommonParams struct {
+	Users    map[string]traq.User
+	Stamps   map[string]string
+	Loc      *time.Location
+	Origin   string
+	Quoted   map[string]traq.Message
+	Files    map[string]traq.FileInfo
+	SelfID   string
+	MyGroups map[string]struct{}
+}
+
+// ListViewParams は list / unread-only 表示用の入力。
+type ListViewParams struct {
+	Label      string
+	Limit      int
+	Offset     int
+	Order      string
+	Msgs       []traq.Message
+	Unread     optional.Option[traq.UnreadChannel]
+	UnreadOnly bool
+	CommonParams
+}
+
+// SearchViewParams は search 表示用の入力。
+type SearchViewParams struct {
+	Label     string
+	Limit     int
+	Offset    int
+	Sort      string
+	TotalHits int64
+	Msgs      []traq.Message
+	CommonParams
+}
+
+// SingleViewParams は send 直後の1件表示用の入力。
+type SingleViewParams struct {
+	Msg traq.Message
+	CommonParams
+}
+
+// Build は ListViewParams から MessageList を作る。
+func (p ListViewParams) Build() MessageList {
 	return MessageList{
-		Label: label, Limit: limit, Offset: offset, Order: order,
-		Msgs: msgs, Users: users, Stamps: stamps, Loc: loc,
-		Unread: unread, UnreadOnly: unreadOnly, Origin: origin,
-		Quoted: quoted, Files: files, SelfID: selfID, MyGroups: myGroups,
+		Label: p.Label, Limit: p.Limit, Offset: p.Offset, Order: p.Order,
+		Msgs: p.Msgs, Users: p.Users, Stamps: p.Stamps, Loc: p.Loc,
+		Unread: p.Unread, UnreadOnly: p.UnreadOnly, Origin: p.Origin,
+		Quoted: p.Quoted, Files: p.Files, SelfID: p.SelfID, MyGroups: p.MyGroups,
 	}
 }
 
-// NewSearchView は search 表示用の MessageList を作る。
-func NewSearchView(
-	label string,
-	limit, offset int,
-	sort string,
-	totalHits int64,
-	msgs []traq.Message,
-	users map[string]traq.User,
-	stamps map[string]string,
-	loc *time.Location,
-	origin string,
-	quoted map[string]traq.Message,
-	files map[string]traq.FileInfo,
-	selfID string,
-	myGroups map[string]struct{},
-) MessageList {
+// Build は SearchViewParams から MessageList を作る。
+func (p SearchViewParams) Build() MessageList {
 	return MessageList{
-		Label: label, Limit: limit, Offset: offset, Sort: sort,
-		TotalHits: optional.Some(totalHits),
-		Msgs:      msgs, Users: users, Stamps: stamps, Loc: loc,
-		Origin: origin, Quoted: quoted, Files: files,
-		SelfID: selfID, MyGroups: myGroups,
+		Label: p.Label, Limit: p.Limit, Offset: p.Offset, Sort: p.Sort,
+		TotalHits: optional.Some(p.TotalHits),
+		Msgs:      p.Msgs, Users: p.Users, Stamps: p.Stamps, Loc: p.Loc,
+		Origin: p.Origin, Quoted: p.Quoted, Files: p.Files,
+		SelfID: p.SelfID, MyGroups: p.MyGroups,
 	}
 }
 
-// NewSingleView は send 直後の1件表示用の MessageList を作る。
-func NewSingleView(
-	msg traq.Message,
-	users map[string]traq.User,
-	stamps map[string]string,
-	loc *time.Location,
-	origin string,
-	quoted map[string]traq.Message,
-	files map[string]traq.FileInfo,
-	selfID string,
-	myGroups map[string]struct{},
-) MessageList {
+// Build は SingleViewParams から MessageList を作る。
+func (p SingleViewParams) Build() MessageList {
 	return MessageList{
-		Msgs: []traq.Message{msg}, Users: users, Stamps: stamps, Loc: loc,
-		Origin: origin, Quoted: quoted, Files: files,
-		SelfID: selfID, MyGroups: myGroups,
+		Msgs: []traq.Message{p.Msg}, Users: p.Users, Stamps: p.Stamps, Loc: p.Loc,
+		Origin: p.Origin, Quoted: p.Quoted, Files: p.Files,
+		SelfID: p.SelfID, MyGroups: p.MyGroups,
 	}
 }
 

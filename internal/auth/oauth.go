@@ -20,23 +20,23 @@ type tokenResponse struct {
 	Scope        string `json:"scope,omitempty"`
 }
 
-func ExchangeCode(
+func (s *Service) exchangeCode(
 	ctx context.Context,
-	origin, clientID, redirectURI, code, verifier string,
+	req CodeExchange,
 ) (tokenResponse, error) {
-	if clientID == "" {
+	if s.clientID == "" {
 		return tokenResponse{}, errors.New(
 			"OAuth client ID is not configured; run `traq auth login --browser` after setting TRAQ_CLIENT_ID or --client-id (see docs/auth.md)",
 		)
 	}
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
-		"code":          {code},
-		"redirect_uri":  {redirectURI},
-		"client_id":     {clientID},
-		"code_verifier": {verifier},
+		"code":          {req.Code},
+		"redirect_uri":  {req.RedirectURI},
+		"client_id":     {s.clientID},
+		"code_verifier": {req.Verifier},
 	}
-	return requestToken(ctx, origin, form)
+	return requestToken(ctx, s.origin, form)
 }
 
 func Refresh(ctx context.Context, origin, clientID string, prev Token) (Token, error) {

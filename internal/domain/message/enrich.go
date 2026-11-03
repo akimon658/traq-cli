@@ -8,18 +8,14 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/user"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/text"
 )
 
 // FetchEnrichment はユーザー・スタンプ・引用・添付を取得する。
 // ユーザー・スタンプの取得失敗はエラーにし、引用・添付の失敗は無視して続行する。
-func FetchEnrichment(
+func (s *Service) FetchEnrichment(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 	contents []string,
 ) (Enrichment, error) {
 	out := Enrichment{
@@ -29,8 +25,8 @@ func FetchEnrichment(
 		Files:    map[string]traq.FileInfo{},
 		MyGroups: map[string]struct{}{},
 	}
-	out.SelfID, out.MyGroups = fetchSelfBestEffort(ctx, e, rt, c)
-	users, err := fetchUserList(ctx, e, rt, c)
+	out.SelfID, out.MyGroups = s.fetchSelfBestEffort(ctx, rt)
+	users, err := s.fetchUserList(ctx, rt)
 	if err != nil {
 		return Enrichment{}, err
 	}
@@ -38,34 +34,29 @@ func FetchEnrichment(
 		out.Users[u.Id] = u
 	}
 
-	stamps, err := fetchStampMap(ctx, e, rt, c)
+	stamps, err := s.fetchStampMap(ctx, rt)
 	if err != nil {
 		return Enrichment{}, err
 	}
 	out.Stamps = stamps
 
-	out.Quoted, out.Files = fetchQuotesAndFiles(ctx, e, rt, c, e.Origin, contents)
+	out.Quoted, out.Files = s.fetchQuotesAndFiles(ctx, rt, contents)
 	return out, nil
 }
 
 // fetchUserList はユーザー一覧を取得する。
-func fetchUserList(
+func (s *Service) fetchUserList(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 ) ([]traq.User, error) {
 	var users []traq.User
-	if err := auth.Exec(
+	if err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
 			var apiErr error
-			users, resp, apiErr = c.GetUsers(ctx)
+			users, resp, apiErr = s.client.GetUsers(ctx)
 			return resp, apiErr
 		},
 	); err != nil {
@@ -75,59 +66,48 @@ func fetchUserList(
 }
 
 // fetchStampMap はスタンプ一覧を取得し、ID->名前のマップで返す。
-func fetchStampMap(
+func (s *Service) fetchStampMap(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 ) (map[string]string, error) {
 	var stamps []traq.StampWithThumbnail
-	if err := auth.Exec(
+	if err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
 			var apiErr error
-			stamps, resp, apiErr = c.GetStamps(ctx)
+			stamps, resp, apiErr = s.client.GetStamps(ctx)
 			return resp, apiErr
 		},
 	); err != nil {
 		return nil, err
 	}
 	out := make(map[string]string, len(stamps))
-	for _, s := range stamps {
-		out[s.Id] = s.Name
+	for _, stamp := range stamps {
+		out[stamp.Id] = stamp.Name
 	}
 	return out, nil
 }
 
 // fetchQuotesAndFiles は引用・添付を取得する。取得失敗は無視して続行する。
-func fetchQuotesAndFiles(
+func (s *Service) fetchQuotesAndFiles(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
-	origin string,
 	contents []string,
 ) (map[string]traq.Message, map[string]traq.FileInfo) {
 	quoted := map[string]traq.Message{}
 	files := map[string]traq.FileInfo{}
-	quoteIDs, fileIDs := text.CollectAllEmbedIDs(contents, origin)
+	quoteIDs, fileIDs := text.CollectAllEmbedIDs(contents, s.env.Origin)
 	for _, id := range quoteIDs {
 		var qm *traq.Message
-		_ = auth.Exec(
+		_ = s.auth.Exec(
 			ctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rt,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
 				var apiErr error
-				qm, resp, apiErr = c.GetMessage(ctx, id)
+				qm, resp, apiErr = s.client.GetMessage(ctx, id)
 				return resp, apiErr
 			},
 		)
@@ -137,16 +117,13 @@ func fetchQuotesAndFiles(
 	}
 	for _, id := range fileIDs {
 		var fi *traq.FileInfo
-		_ = auth.Exec(
+		_ = s.auth.Exec(
 			ctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rt,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
 				var apiErr error
-				fi, resp, apiErr = c.GetFileMeta(ctx, id)
+				fi, resp, apiErr = s.client.GetFileMeta(ctx, id)
 				return resp, apiErr
 			},
 		)
@@ -168,13 +145,12 @@ func contentsOf(msgs []traq.Message) []string {
 
 // fetchSelfBestEffort は自分宛メンション判定用の自IDと所属グループを取得する。
 // 表示の補助情報なので、取得に失敗しても空のまま続行する。
-func fetchSelfBestEffort(
+func (s *Service) fetchSelfBestEffort(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 ) (string, map[string]struct{}) {
-	me, err := user.FetchMe(ctx, e, rt, c)
+	userSvc := user.NewService(s.env, s.client)
+	me, err := userSvc.FetchMe(ctx, rt)
 	if err != nil || me == nil {
 		return "", map[string]struct{}{}
 	}

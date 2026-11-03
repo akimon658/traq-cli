@@ -8,42 +8,34 @@ import (
 	"github.com/traPtitech/go-traq"
 
 	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/domain/channel"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 )
 
 // Send はチャンネルにメッセージを投稿し、表示用の付随情報と共に返す。
-func Send(
+func (s *Service) Send(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 	target, content string,
 ) (SendResult, error) {
 	if err := auth.RequireScope(rt, auth.ScopeWrite); err != nil {
 		return SendResult{}, err
 	}
-	channelID, err := channel.ResolveChannel(ctx, e, rt, c, target)
+	channelID, err := s.channel.ResolveChannel(ctx, rt, target)
 	if err != nil {
 		return SendResult{}, err
 	}
 	var msg *traq.Message
-	if err := auth.Exec(
+	if err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
-			msg, resp, err = c.PostMessage(ctx, channelID, content)
+			msg, resp, err = s.client.PostMessage(ctx, channelID, content)
 			return resp, err
 		},
 	); err != nil {
 		return SendResult{}, err
 	}
-	enrich, err := FetchEnrichment(ctx, e, rt, c, []string{msg.Content})
+	enrich, err := s.FetchEnrichment(ctx, rt, []string{msg.Content})
 	if err != nil {
 		return SendResult{}, err
 	}
@@ -51,6 +43,6 @@ func Send(
 		Msg:        *msg,
 		Enrichment: enrich,
 		Loc:        time.Local,
-		Origin:     e.Origin,
+		Origin:     s.env.Origin,
 	}, nil
 }

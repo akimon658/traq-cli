@@ -46,19 +46,21 @@ func newFileDownloadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Co
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			rt, err := auth.ResolveToken(
+			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+			rt, err := authSvc.ResolveToken(
 				cmd.Context(),
-				e.Origin,
-				e.ClientID,
 				e.TokenOverride,
 				e.AccessToken,
-				e.LoadStore(),
 			)
 			if err != nil {
 				return err
 			}
 			c := client.New(e.Origin)
-			res, err := file.Download(cmd.Context(), e, &rt, c, args[0], out, force)
+			res, err := file.NewService(e, c).Download(cmd.Context(), &rt, file.DownloadOptions{
+				FileID: args[0],
+				Out:    out,
+				Force:  force,
+			})
 			if err != nil {
 				return err
 			}

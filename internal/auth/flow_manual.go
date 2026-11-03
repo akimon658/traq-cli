@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
@@ -44,7 +43,7 @@ func StartManualLogin(
 	if _, err := sessions.Save(sess); err != nil {
 		return "", err
 	}
-	return AuthorizeURL(sess.Origin, sess.ClientID, sess.RedirectURI, scopes, pk), nil
+	return pk.AuthorizeURL(sess.Origin, sess.ClientID, sess.RedirectURI, scopes), nil
 }
 
 // ParseCallback は traq auth complete の引数から code と state を取り出す。
@@ -76,12 +75,8 @@ func ParseCallback(raw string) (code, state string, denied, err error) {
 }
 
 // CompleteManualLogin は手動ログインを完了し、トークンと保存先を返す。
-func CompleteManualLogin(
+func (s *Service) CompleteManualLogin(
 	ctx context.Context,
-	origin, clientID string,
-	c *client.Client,
-	store Store,
-	sessions SessionStore,
 	callback string,
 ) (Token, string, error) {
 	code, state, denied, err := ParseCallback(callback)
@@ -91,7 +86,7 @@ func CompleteManualLogin(
 	if denied != nil {
 		return Token{}, "", exit.GeneralError(denied)
 	}
-	sess, found, err := sessions.Load(time.Now())
+	sess, found, err := s.sessions.Load(time.Now())
 	if err != nil {
 		return Token{}, "", err
 	}
@@ -107,30 +102,31 @@ func CompleteManualLogin(
 		))
 	}
 
-	sessOrigin := origin
+	sessOrigin := s.origin
 	if sess.Origin != "" {
 		sessOrigin = sess.Origin
 	}
-	sessClientID := clientID
+	sessClientID := s.clientID
 	if sess.ClientID != "" {
 		sessClientID = sess.ClientID
 	}
-	t, venue, err := FinishLogin(
+	finishSvc := *s
+	finishSvc.origin = sessOrigin
+	finishSvc.clientID = sessClientID
+	t, venue, err := finishSvc.FinishLogin(
 		ctx,
-		sessOrigin,
-		sessClientID,
-		c,
-		store,
-		code,
-		sess.RedirectURI,
-		sess.Verifier,
-		sess.Scopes,
+		FinishRequest{
+			Code:           code,
+			RedirectURI:    sess.RedirectURI,
+			Verifier:       sess.Verifier,
+			FallbackScopes: sess.Scopes,
+		},
 	)
 	if err != nil {
 		return Token{}, "", err
 	}
 	// 認可コードは 1 回限りなので、トークン保存まで成功したらセッションを消す
-	if _, err := sessions.Delete(); err != nil {
+	if _, err := s.sessions.Delete(); err != nil {
 		return Token{}, "", err
 	}
 	return t, venue, nil

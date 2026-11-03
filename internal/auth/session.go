@@ -27,10 +27,9 @@ func (t *Token) OriginOr(fallback string) string {
 
 // ResolveToken はトークンを --token > TRAQ_ACCESS_TOKEN > 保存済みの順で解決する。
 // 保存済みトークンが期限切れの場合は refresh を試み、成功すれば保存して返す。
-func ResolveToken(
+func (s *Service) ResolveToken(
 	ctx context.Context,
-	origin, clientID, tokenOverride, accessToken string,
-	store Store,
+	tokenOverride, accessToken string,
 ) (ResolvedToken, error) {
 	t := cmp.Or(tokenOverride, accessToken)
 	if t != "" {
@@ -39,11 +38,11 @@ func ResolveToken(
 			source = "flag"
 		}
 		return ResolvedToken{
-			Token:  &Token{Origin: origin, AccessToken: t},
+			Token:  &Token{Origin: s.origin, AccessToken: t},
 			Source: source,
 		}, nil
 	}
-	stored, source, found, err := store.Load()
+	stored, source, found, err := s.store.Load()
 	if err != nil {
 		return ResolvedToken{}, err
 	}
@@ -58,14 +57,14 @@ func ResolveToken(
 				errors.New("the stored token has expired: run 'traq auth login'"),
 			)
 		}
-		nt, rerr := Refresh(ctx, stored.OriginOr(origin), clientID, stored)
+		nt, rerr := Refresh(ctx, stored.OriginOr(s.origin), s.clientID, stored)
 		if rerr != nil {
-			_, _ = store.Delete()
+			_, _ = s.store.Delete()
 			return ResolvedToken{}, exit.AuthRequiredError(
 				fmt.Errorf("refresh failed: %v; run 'traq auth login'", rerr),
 			)
 		}
-		if _, serr := store.Save(nt); serr != nil {
+		if _, serr := s.store.Save(nt); serr != nil {
 			return ResolvedToken{}, serr
 		}
 		stored = nt
@@ -75,16 +74,14 @@ func ResolveToken(
 
 // Exec は API を実行し、401 なら refresh して1回だけリトライする。
 // refresh 後のトークンは保存先に書き戻し、呼び出し元の ResolvedToken も更新する。
-func Exec(
+func (s *Service) Exec(
 	ctx context.Context,
-	origin, clientID string,
-	store Store,
 	rt *ResolvedToken,
 	fn func(ctx context.Context) (*http.Response, error),
 ) error {
 	resp, err := fn(client.TokenContext(ctx, rt.Token.AccessToken))
 	if resp != nil && resp.StatusCode == http.StatusUnauthorized {
-		nt, rerr := RefreshToken(ctx, origin, clientID, rt.Token)
+		nt, rerr := RefreshToken(ctx, s.origin, s.clientID, rt.Token)
 		if rerr != nil {
 			return exit.AuthRequiredError(
 				fmt.Errorf(
@@ -93,7 +90,7 @@ func Exec(
 				),
 			)
 		}
-		if _, serr := store.Save(nt); serr != nil {
+		if _, serr := s.store.Save(nt); serr != nil {
 			return serr
 		}
 		*rt.Token = nt

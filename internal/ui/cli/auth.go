@@ -91,14 +91,8 @@ func runLogin(cmd *cobra.Command, newEnv func() *config.Env, flags *globalFlags)
 		if manual {
 			return exit.UsageError(errors.New("cannot combine --token with --manual"))
 		}
-		c := client.New(e.Origin)
-		t, venue, err := auth.LoginWithToken(
-			cmd.Context(),
-			e.Origin,
-			c,
-			e.LoadStore(),
-			e.TokenOverride,
-		)
+		svc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+		t, venue, err := svc.LoginWithToken(cmd.Context(), e.TokenOverride)
 		if err != nil {
 			return err
 		}
@@ -113,25 +107,35 @@ func runLogin(cmd *cobra.Command, newEnv func() *config.Env, flags *globalFlags)
 	if !browser {
 		return exit.UsageError(errors.New("specify either --browser, --manual or --token <TOKEN>"))
 	}
-	return runBrowserLogin(cmd.Context(), e, scopeFlag, openBrowser, cmd.OutOrStdout())
+	return BrowserLogin{
+		Env:         e,
+		OpenBrowser: openBrowser,
+		Out:         cmd.OutOrStdout(),
+	}.Run(cmd.Context(), scopeFlag)
 }
 
-func runBrowserLogin(
+// BrowserLogin はブラウザログインに必要な常駐依存を束ねる。
+type BrowserLogin struct {
+	Env         *config.Env
+	OpenBrowser func(string)
+	Out         io.Writer
+}
+
+// Run はブラウザログインを実行する。
+func (b BrowserLogin) Run(
 	ctx context.Context,
-	e *config.Env,
 	scopeFlag string,
-	openBrowser func(string),
-	out io.Writer,
 ) error {
+	e := b.Env
 	sess, err := auth.PrepareBrowserLogin(e.Origin, e.ClientID, scopeFlag)
 	if err != nil {
 		return err
 	}
 	defer sess.Callback.Close()
-	if err := view.WriteBrowserInstructions(out, sess.AuthorizeURL); err != nil {
+	if err := view.WriteBrowserInstructions(b.Out, sess.AuthorizeURL); err != nil {
 		return err
 	}
-	openBrowser(sess.AuthorizeURL)
+	b.OpenBrowser(sess.AuthorizeURL)
 	ctx, cancel := context.WithTimeout(ctx, auth.LoginTimeout)
 	defer cancel()
 	code, err := sess.Callback.Wait(ctx)
@@ -141,22 +145,17 @@ func runBrowserLogin(
 		}
 		return err
 	}
-	c := client.New(e.Origin)
-	t, venue, err := auth.FinishLogin(
-		ctx,
-		e.Origin,
-		e.ClientID,
-		c,
-		e.LoadStore(),
-		code,
-		sess.RedirectURI,
-		sess.PKCE.Verifier,
-		sess.Scopes,
-	)
+	svc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+	t, venue, err := svc.FinishLogin(ctx, auth.FinishRequest{
+		Code:           code,
+		RedirectURI:    sess.RedirectURI,
+		Verifier:       sess.PKCE.Verifier,
+		FallbackScopes: sess.Scopes,
+	})
 	if err != nil {
 		return err
 	}
-	return view.WriteLoginSuccessWithScopes(out, t, venue)
+	return view.WriteLoginSuccessWithScopes(b.Out, t, venue)
 }
 
 func runManualLogin(e *config.Env, scopeFlag string, out io.Writer) error {
@@ -168,16 +167,8 @@ func runManualLogin(e *config.Env, scopeFlag string, out io.Writer) error {
 }
 
 func runComplete(ctx context.Context, cmd *cobra.Command, e *config.Env, callback string) error {
-	c := client.New(e.Origin)
-	t, venue, err := auth.CompleteManualLogin(
-		ctx,
-		e.Origin,
-		e.ClientID,
-		c,
-		e.LoadStore(),
-		e.LoadSessions(),
-		callback,
-	)
+	svc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+	t, venue, err := svc.CompleteManualLogin(ctx, callback)
 	if err != nil {
 		return err
 	}
@@ -196,13 +187,11 @@ func runLogout(cmd *cobra.Command, e *config.Env) error {
 }
 
 func runStatus(cmd *cobra.Command, e *config.Env) error {
-	rt, err := auth.ResolveToken(
+	svc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+	rt, err := svc.ResolveToken(
 		cmd.Context(),
-		e.Origin,
-		e.ClientID,
 		e.TokenOverride,
 		e.AccessToken,
-		e.LoadStore(),
 	)
 	if err != nil {
 		return err

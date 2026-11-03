@@ -46,7 +46,11 @@ func manualBrowserDecision(t *testing.T, sess *http.Cookie, submit, authorizeURL
 		"manual login should use the registered redirect URI without a port",
 	)
 
-	authzResp, authzBody := requestNoRedirect(t, http.MethodGet, authorizeURL, sess, nil)
+	authzResp, authzBody := requestNoRedirect(t, NoRedirectRequest{
+		Method: http.MethodGet,
+		URL:    authorizeURL,
+		Sess:   sess,
+	})
 	require.Equal(
 		t,
 		http.StatusFound,
@@ -61,10 +65,12 @@ func manualBrowserDecision(t *testing.T, sess *http.Cookie, submit, authorizeURL
 		"authorize should redirect to the consent page: %q", consent,
 	)
 
-	decideResp, decideBody := requestNoRedirect(
-		t, http.MethodPost, aURL.Scheme+"://"+aURL.Host+"/api/v3/oauth2/authorize/decide",
-		sess, url.Values{"submit": {submit}},
-	)
+	decideResp, decideBody := requestNoRedirect(t, NoRedirectRequest{
+		Method: http.MethodPost,
+		URL:    aURL.Scheme + "://" + aURL.Host + "/api/v3/oauth2/authorize/decide",
+		Sess:   sess,
+		Form:   url.Values{"submit": {submit}},
+	})
 	require.Equal(
 		t,
 		http.StatusFound,

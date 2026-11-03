@@ -12,9 +12,7 @@ import (
 	"github.com/traPtitech/go-traq"
 
 	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/domain/channel"
 	"github.com/akimon658/traq-cli/internal/foundation/client"
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
@@ -26,11 +24,9 @@ const (
 )
 
 // Search はメッセージを検索する。
-func Search(
+func (s *Service) Search(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 	word string,
 	opts SearchOptions,
 ) (SearchResult, error) {
@@ -51,7 +47,7 @@ func Search(
 	}
 
 	// ユーザー一覧は名前解決と表示の両方に使うため先に取得する。
-	users, err := fetchUserList(ctx, e, rt, c)
+	users, err := s.fetchUserList(ctx, rt)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -79,7 +75,7 @@ func Search(
 		q.Word = optional.Some(word)
 	}
 	if opts.In != "" {
-		channelID, err := channel.ResolveChannel(ctx, e, rt, c, opts.In)
+		channelID, err := s.channel.ResolveChannel(ctx, rt, opts.In)
 		if err != nil {
 			return SearchResult{}, err
 		}
@@ -104,15 +100,12 @@ func Search(
 	}
 
 	var result *traq.MessageSearchResult
-	if err := auth.Exec(
+	if err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
-			result, resp, err = c.SearchMessages(ctx, q)
+			result, resp, err = s.client.SearchMessages(ctx, q)
 			return resp, err
 		},
 	); err != nil {
@@ -124,15 +117,15 @@ func Search(
 		Quoted: map[string]traq.Message{}, Files: map[string]traq.FileInfo{},
 		MyGroups: map[string]struct{}{},
 	}
-	enrich.SelfID, enrich.MyGroups = fetchSelfBestEffort(ctx, e, rt, c)
+	enrich.SelfID, enrich.MyGroups = s.fetchSelfBestEffort(ctx, rt)
 	if len(result.Hits) > 0 {
-		stamps, err := fetchStampMap(ctx, e, rt, c)
+		stamps, err := s.fetchStampMap(ctx, rt)
 		if err != nil {
 			return SearchResult{}, err
 		}
 		enrich.Stamps = stamps
-		enrich.Quoted, enrich.Files = fetchQuotesAndFiles(
-			ctx, e, rt, c, e.Origin, contentsOf(result.Hits),
+		enrich.Quoted, enrich.Files = s.fetchQuotesAndFiles(
+			ctx, rt, contentsOf(result.Hits),
 		)
 	}
 
@@ -145,17 +138,17 @@ func Search(
 		Msgs:       result.Hits,
 		Enrichment: enrich,
 		Loc:        time.Local,
-		Origin:     e.Origin,
+		Origin:     s.env.Origin,
 	}, nil
 }
 
 // CleanUserInputs は StringSlice の空要素を取り除く。
 func CleanUserInputs(inputs []string) []string {
 	out := make([]string, 0, len(inputs))
-	for _, s := range inputs {
-		s = strings.TrimSpace(s)
-		if s != "" {
-			out = append(out, s)
+	for _, str := range inputs {
+		str = strings.TrimSpace(str)
+		if str != "" {
+			out = append(out, str)
 		}
 	}
 	return out

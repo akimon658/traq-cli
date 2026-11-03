@@ -15,12 +15,32 @@ import (
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
+// Service はチャンネル操作に必要な常駐依存を束ねる。
+// 実行環境と通信路は構築時に固定し、要求ごとの認証情報はメソッド引数で受ける。
+type Service struct {
+	env    *config.Env
+	client *client.Client
+	auth   *auth.Service
+}
+
+// NewService はチャンネルサービスを作る。
+func NewService(env *config.Env, client *client.Client) *Service {
+	return &Service{
+		env:    env,
+		client: client,
+		auth: auth.NewService(
+			env.Origin,
+			env.ClientID,
+			env.LoadStore(),
+			env.LoadSessions(),
+		),
+	}
+}
+
 // ResolveChannel はチャンネル指定 (UUID または "#general/a/b" 形式のパス) を ID に解決する。
-func ResolveChannel(
+func (s *Service) ResolveChannel(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 	target string,
 ) (string, error) {
 	if _, err := uuid.Parse(target); err == nil {
@@ -31,14 +51,11 @@ func ResolveChannel(
 	}
 	path := strings.TrimPrefix(target, "#")
 	var channelID string
-	err := auth.Exec(
+	err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
-			list, resp, apiErr := c.GetChannels(ctx, true)
+			list, resp, apiErr := s.client.GetChannels(ctx, true)
 			if apiErr != nil {
 				return resp, apiErr
 			}
@@ -56,26 +73,21 @@ func ResolveChannel(
 }
 
 // FetchUnreadGroups は未読情報を取得し、表示用のグループに分類して返す。
-func FetchUnreadGroups(
+func (s *Service) FetchUnreadGroups(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 ) (Groups, error) {
 	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
 		return Groups{}, err
 	}
 	var unreads []traq.UnreadChannel
-	if err := auth.Exec(
+	if err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
 			var apiErr error
-			unreads, resp, apiErr = c.GetMyUnreadChannels(ctx)
+			unreads, resp, apiErr = s.client.GetMyUnreadChannels(ctx)
 			return resp, apiErr
 		},
 	); err != nil {
@@ -94,16 +106,13 @@ func FetchUnreadGroups(
 	g.Go(func() error {
 		tok := *rt.Token
 		rtLocal := &auth.ResolvedToken{Token: &tok, Source: rt.Source}
-		return auth.Exec(
+		return s.auth.Exec(
 			gctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rtLocal,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
 				var apiErr error
-				channelList, resp, apiErr = c.GetChannels(ctx, true)
+				channelList, resp, apiErr = s.client.GetChannels(ctx, true)
 				return resp, apiErr
 			},
 		)
@@ -111,16 +120,13 @@ func FetchUnreadGroups(
 	g.Go(func() error {
 		tok := *rt.Token
 		rtLocal := &auth.ResolvedToken{Token: &tok, Source: rt.Source}
-		return auth.Exec(
+		return s.auth.Exec(
 			gctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rtLocal,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
 				var apiErr error
-				subs, resp, apiErr = c.GetMyChannelSubscriptions(ctx)
+				subs, resp, apiErr = s.client.GetMyChannelSubscriptions(ctx)
 				return resp, apiErr
 			},
 		)
@@ -128,16 +134,13 @@ func FetchUnreadGroups(
 	g.Go(func() error {
 		tok := *rt.Token
 		rtLocal := &auth.ResolvedToken{Token: &tok, Source: rt.Source}
-		return auth.Exec(
+		return s.auth.Exec(
 			gctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rtLocal,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
 				var apiErr error
-				starIDs, resp, apiErr = c.GetMyStars(ctx)
+				starIDs, resp, apiErr = s.client.GetMyStars(ctx)
 				return resp, apiErr
 			},
 		)
@@ -162,16 +165,13 @@ func FetchUnreadGroups(
 	}
 	if needUsers {
 		var users []traq.User
-		if err := auth.Exec(
+		if err := s.auth.Exec(
 			ctx,
-			e.Origin,
-			e.ClientID,
-			e.LoadStore(),
 			rt,
 			func(ctx context.Context) (*http.Response, error) {
 				var resp *http.Response
 				var apiErr error
-				users, resp, apiErr = c.GetUsers(ctx)
+				users, resp, apiErr = s.client.GetUsers(ctx)
 				return resp, apiErr
 			},
 		); err != nil {
@@ -183,15 +183,21 @@ func FetchUnreadGroups(
 	}
 
 	subLevels := make(map[string]traq.ChannelSubscribeLevel, len(subs))
-	for _, s := range subs {
-		subLevels[s.ChannelId] = s.Level
+	for _, sub := range subs {
+		subLevels[sub.ChannelId] = sub.Level
 	}
 	stars := make(map[string]bool, len(starIDs))
 	for _, id := range starIDs {
 		stars[id] = true
 	}
 
-	groups, err := Classify(unreads, pathMap, dmMap, userNames, subLevels, stars)
+	groups, err := Tables{
+		Paths:     pathMap,
+		DM:        dmMap,
+		UserNames: userNames,
+		SubLevels: subLevels,
+		Stars:     stars,
+	}.Classify(unreads)
 	if err != nil {
 		return Groups{}, exit.GeneralError(err)
 	}

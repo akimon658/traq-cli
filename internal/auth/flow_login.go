@@ -13,14 +13,11 @@ import (
 // LoginWithToken は Bot 管理画面等で発行したトークンを検証・保存する。
 // bot と OAuth のどちらも受け付け、種別は /users/me の応答から自動判別する。
 // buildTokenFromMe に表示用の種別判別を集約している。
-func LoginWithToken(
+func (s *Service) LoginWithToken(
 	ctx context.Context,
-	origin string,
-	c *client.Client,
-	store Store,
 	value string,
 ) (Token, string, error) {
-	me, resp, err := c.GetMe(ctx, value)
+	me, resp, err := s.client.GetMe(ctx, value)
 	if err != nil {
 		apiErr := client.WrapError(err, resp)
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
@@ -30,8 +27,8 @@ func LoginWithToken(
 		}
 		return Token{}, "", exit.GeneralError(apiErr)
 	}
-	t := buildTokenFromMe(origin, value, me)
-	venue, err := store.Save(t)
+	t := buildTokenFromMe(s.origin, value, me)
+	venue, err := s.store.Save(t)
 	if err != nil {
 		return Token{}, "", err
 	}
@@ -67,42 +64,42 @@ func PrepareBrowserLogin(origin, clientID, scopeFlag string) (*BrowserSession, e
 		PKCE:         pk,
 		Callback:     cb,
 		RedirectURI:  redirectURI,
-		AuthorizeURL: AuthorizeURL(origin, clientID, redirectURI, scopes, pk),
+		AuthorizeURL: pk.AuthorizeURL(origin, clientID, redirectURI, scopes),
 		Scopes:       scopes,
 	}, nil
 }
 
 // FinishLogin は認可コードをトークンに交換し、/users/me で検証して保存する。
 // ブラウザフローと手動フロー (CompleteManualLogin) の共通後半処理。
-func FinishLogin(
+func (s *Service) FinishLogin(
 	ctx context.Context,
-	origin, clientID string,
-	c *client.Client,
-	store Store,
-	code, redirectURI, verifier string,
-	fallbackScopes []string,
+	req FinishRequest,
 ) (Token, string, error) {
-	resp, err := ExchangeCode(ctx, origin, clientID, redirectURI, code, verifier)
+	resp, err := s.exchangeCode(ctx, CodeExchange{
+		RedirectURI: req.RedirectURI,
+		Code:        req.Code,
+		Verifier:    req.Verifier,
+	})
 	if err != nil {
 		return Token{}, "", err
 	}
 	scopeList := ParseScopes(resp.Scope)
 	if len(scopeList) == 0 {
-		scopeList = fallbackScopes
+		scopeList = req.FallbackScopes
 	}
 
-	me, meResp, err := c.GetMe(ctx, resp.AccessToken)
+	me, meResp, err := s.client.GetMe(ctx, resp.AccessToken)
 	if err != nil {
 		return Token{}, "", exit.GeneralError(client.WrapError(err, meResp))
 	}
-	t := buildTokenFromMe(origin, resp.AccessToken, me)
+	t := buildTokenFromMe(s.origin, resp.AccessToken, me)
 	t.RefreshToken = resp.RefreshToken
 	t.Scope = scopeList
 	t.IssuedAt = time.Now()
 	if resp.ExpiresIn > 0 {
 		t.ExpiresAt = time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
 	}
-	venue, err := store.Save(t)
+	venue, err := s.store.Save(t)
 	if err != nil {
 		return Token{}, "", err
 	}

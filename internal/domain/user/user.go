@@ -18,27 +18,43 @@ func FallbackLabel(id string) string {
 	return fmt.Sprintf("(ユーザー解決失敗 id:%s)", id)
 }
 
+// Service はユーザー操作に必要な常駐依存を束ねる。
+type Service struct {
+	env    *config.Env
+	client *client.Client
+	auth   *auth.Service
+}
+
+// NewService はユーザーサービスを作る。
+func NewService(env *config.Env, client *client.Client) *Service {
+	return &Service{
+		env:    env,
+		client: client,
+		auth: auth.NewService(
+			env.Origin,
+			env.ClientID,
+			env.LoadStore(),
+			env.LoadSessions(),
+		),
+	}
+}
+
 // FetchMe は自分のユーザー詳細を取得する。
-func FetchMe(
+func (s *Service) FetchMe(
 	ctx context.Context,
-	e *config.Env,
 	rt *auth.ResolvedToken,
-	c *client.Client,
 ) (*traq.MyUserDetail, error) {
 	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
 		return nil, err
 	}
 	var me *traq.MyUserDetail
-	if err := auth.Exec(
+	if err := s.auth.Exec(
 		ctx,
-		e.Origin,
-		e.ClientID,
-		e.LoadStore(),
 		rt,
 		func(ctx context.Context) (*http.Response, error) {
 			var resp *http.Response
 			var apiErr error
-			me, resp, apiErr = c.GetMe(ctx, rt.Token.AccessToken)
+			me, resp, apiErr = s.client.GetMe(ctx, rt.Token.AccessToken)
 			return resp, apiErr
 		},
 	); err != nil {

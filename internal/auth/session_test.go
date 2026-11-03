@@ -14,7 +14,8 @@ import (
 func TestResolveTokenPrefersEnvironment(t *testing.T) {
 	t.Parallel()
 	ms := NewMockStore(gomock.NewController(t))
-	rt, err := ResolveToken(t.Context(), DefaultOrigin, "client", "", "env-token", ms)
+	svc := NewService(DefaultOrigin, "client", ms, nil)
+	rt, err := svc.ResolveToken(t.Context(), "", "env-token")
 	require.NoError(t, err)
 	assert.Equal(t, "environment", rt.Source)
 	assert.Equal(t, "env-token", rt.Token.AccessToken)
@@ -23,7 +24,8 @@ func TestResolveTokenPrefersEnvironment(t *testing.T) {
 func TestResolveTokenPrefersFlag(t *testing.T) {
 	t.Parallel()
 	ms := NewMockStore(gomock.NewController(t))
-	rt, err := ResolveToken(t.Context(), DefaultOrigin, "client", "flag-token", "env-token", ms)
+	svc := NewService(DefaultOrigin, "client", ms, nil)
+	rt, err := svc.ResolveToken(t.Context(), "flag-token", "env-token")
 	require.NoError(t, err)
 	assert.Equal(t, "flag", rt.Source)
 	assert.Equal(t, "flag-token", rt.Token.AccessToken)
@@ -39,7 +41,8 @@ func TestResolveTokenFromStore(t *testing.T) {
 		Origin:      DefaultOrigin,
 		ExpiresAt:   time.Now().Add(24 * time.Hour),
 	}, "keychain", true, nil).Times(1)
-	rt, err := ResolveToken(t.Context(), DefaultOrigin, "client", "", "", ms)
+	svc := NewService(DefaultOrigin, "client", ms, nil)
+	rt, err := svc.ResolveToken(t.Context(), "", "")
 	require.NoError(t, err)
 	assert.Equal(t, "keychain", rt.Source)
 	assert.Equal(t, "stored-token", rt.Token.AccessToken)
@@ -49,7 +52,8 @@ func TestResolveTokenNotAuthenticated(t *testing.T) {
 	t.Parallel()
 	ms := NewMockStore(gomock.NewController(t))
 	ms.EXPECT().Load().Return(Token{}, "", false, nil).Times(1)
-	_, err := ResolveToken(t.Context(), DefaultOrigin, "client", "", "", ms)
+	svc := NewService(DefaultOrigin, "client", ms, nil)
+	_, err := svc.ResolveToken(t.Context(), "", "")
 	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, exit.AuthRequired, ec.Code)
@@ -63,7 +67,8 @@ func TestResolveTokenExpiredWithoutRefreshToken(t *testing.T) {
 		AccessToken: "expired-token",
 		ExpiresAt:   time.Now().Add(-1 * time.Hour),
 	}, "keychain", true, nil).Times(1)
-	_, err := ResolveToken(t.Context(), DefaultOrigin, "client", "", "", ms)
+	svc := NewService(DefaultOrigin, "client", ms, nil)
+	_, err := svc.ResolveToken(t.Context(), "", "")
 	var ec *exit.Error
 	require.ErrorAs(t, err, &ec)
 	assert.Equal(t, exit.AuthRequired, ec.Code)

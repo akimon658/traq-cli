@@ -34,22 +34,27 @@ func (g Groups) Empty() bool {
 		len(g.Starred) == 0 && len(g.Others) == 0
 }
 
+// Tables は未読分類に必要な参照データを束ねる。
+// 解決済みマップ群をレシーバに保持し、要求ごとの未読一覧を引数で受ける。
+type Tables struct {
+	Paths     map[string]string
+	DM        map[string]string
+	UserNames map[string]string
+	SubLevels map[string]traq.ChannelSubscribeLevel
+	Stars     map[string]bool
+}
+
 // Classify は未読を DM/メンション/通知オン/お気に入り/その他に分類し、
 // 各グループ内を updatedAt 降順 (同値は channelID 昇順) にソートする。
 // 公開・DMいずれにも解決できない channelID はエラーを返す。
 // DM相手ユーザが解決できない場合 (停止済みユーザー等) は解決失敗表示で続行する。
-func Classify(
+func (t Tables) Classify(
 	unreads []traq.UnreadChannel,
-	pathMap map[string]string,
-	dmMap map[string]string,
-	userNames map[string]string,
-	subLevels map[string]traq.ChannelSubscribeLevel,
-	stars map[string]bool,
 ) (Groups, error) {
 	var g Groups
 	for _, u := range unreads {
-		if userID, ok := dmMap[u.ChannelId]; ok {
-			name, ok := userNames[userID]
+		if userID, ok := t.DM[u.ChannelId]; ok {
+			name, ok := t.UserNames[userID]
 			display := user.FallbackLabel(userID)
 			if ok {
 				display = "@" + name
@@ -62,7 +67,7 @@ func Classify(
 			})
 			continue
 		}
-		path, ok := pathMap[u.ChannelId]
+		path, ok := t.Paths[u.ChannelId]
 		if !ok {
 			return Groups{}, fmt.Errorf("channel not found: %s", u.ChannelId)
 		}
@@ -75,9 +80,9 @@ func Classify(
 		switch {
 		case u.Noticeable:
 			g.Mention = append(g.Mention, e)
-		case subLevels[u.ChannelId] == traq.CHANNELSUBSCRIBELEVEL_notified:
+		case t.SubLevels[u.ChannelId] == traq.CHANNELSUBSCRIBELEVEL_notified:
 			g.Notified = append(g.Notified, e)
-		case stars[u.ChannelId]:
+		case t.Stars[u.ChannelId]:
 			g.Starred = append(g.Starred, e)
 		default:
 			g.Others = append(g.Others, e)
