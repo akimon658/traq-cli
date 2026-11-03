@@ -3,22 +3,19 @@ package message
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/moznion/go-optional"
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/channel"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // List はチャンネルのメッセージ一覧を取得する。
 func (s *Service) List(
 	ctx context.Context,
-	rt *auth.ResolvedToken,
 	target string,
 	opts ListOptions,
 ) (ListResult, error) {
@@ -34,10 +31,7 @@ func (s *Service) List(
 		return ListResult{}, err
 	}
 
-	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
-		return ListResult{}, err
-	}
-	channelID, err := s.channel.ResolveChannel(ctx, rt, target)
+	channelID, err := s.channel.ResolveChannel(ctx, target)
 	if err != nil {
 		return ListResult{}, err
 	}
@@ -46,22 +40,13 @@ func (s *Service) List(
 	// 未読の境界メッセージの createdAt は unread.Since と一致するため、
 	// 範囲の端は常に含めて取得する (--inclusive は無視する)。
 	var (
-		unread             optional.Option[traq.UnreadChannel]
+		unread             optional.Option[gotraq.UnreadChannel]
 		effectiveSince     = since
 		effectiveInclusive = opts.Inclusive
 	)
 	if opts.UnreadOnly {
-		var list []traq.UnreadChannel
-		if err := s.auth.Exec(
-			ctx,
-			rt,
-			func(ctx context.Context) (*http.Response, error) {
-				var resp *http.Response
-				var apiErr error
-				list, resp, apiErr = s.client.GetMyUnreadChannels(ctx)
-				return resp, apiErr
-			},
-		); err != nil {
+		list, err := s.api.GetMyUnreadChannels(ctx)
+		if err != nil {
 			return ListResult{}, err
 		}
 		for _, u := range list {
@@ -84,36 +69,30 @@ func (s *Service) List(
 		}
 	}
 
-	var msgs []traq.Message
+	var msgs []gotraq.Message
 	// 未読が無い場合 (--unread-only の未読0件) はメッセージを取得せず表示のみ行う。
 	if !opts.UnreadOnly || unread.IsSome() {
-		if err := s.auth.Exec(
-			ctx,
-			rt,
-			func(ctx context.Context) (*http.Response, error) {
-				var resp *http.Response
-				msgs, resp, err = s.client.GetChannelMessages(ctx, channelID, client.MessageQuery{
-					Limit:     int32(opts.Limit),
-					Offset:    int32(opts.Offset),
-					Since:     effectiveSince,
-					Until:     until,
-					Inclusive: effectiveInclusive,
-					Order:     opts.Order,
-				})
-				return resp, err
-			},
-		); err != nil {
+		var err error
+		msgs, err = s.api.GetChannelMessages(ctx, channelID, traq.MessageQuery{
+			Limit:     int32(opts.Limit),
+			Offset:    int32(opts.Offset),
+			Since:     effectiveSince,
+			Until:     until,
+			Inclusive: effectiveInclusive,
+			Order:     opts.Order,
+		})
+		if err != nil {
 			return ListResult{}, err
 		}
 	}
 
 	enrich := Enrichment{
-		Users: map[string]traq.User{}, Stamps: map[string]string{},
-		Quoted: map[string]traq.Message{}, Files: map[string]traq.FileInfo{},
+		Users: map[string]gotraq.User{}, Stamps: map[string]string{},
+		Quoted: map[string]gotraq.Message{}, Files: map[string]gotraq.FileInfo{},
 		MyGroups: map[string]struct{}{},
 	}
 	if len(msgs) > 0 {
-		enrich, err = s.FetchEnrichment(ctx, rt, contentsOf(msgs))
+		enrich, err = s.FetchEnrichment(ctx, contentsOf(msgs))
 		if err != nil {
 			return ListResult{}, err
 		}
@@ -122,18 +101,7 @@ func (s *Service) List(
 	// --show-unread 用の未読情報。表示の補助なので取得に失敗しても本体の表示は続行する。
 	// --unread-only 時は取得済みなのでスキップする。
 	if opts.ShowUnread && !opts.UnreadOnly {
-		var list []traq.UnreadChannel
-		uerr := s.auth.Exec(
-			ctx,
-			rt,
-			func(ctx context.Context) (*http.Response, error) {
-				var resp *http.Response
-				var apiErr error
-				list, resp, apiErr = s.client.GetMyUnreadChannels(ctx)
-				return resp, apiErr
-			},
-		)
-		if uerr == nil {
+		if list, uerr := s.api.GetMyUnreadChannels(ctx); uerr == nil {
 			for i := range list {
 				if list[i].ChannelId == channelID {
 					unread = optional.Some(list[i])

@@ -25,7 +25,7 @@ func testManualSession() ManualSession {
 		RedirectURI: ManualRedirectURI,
 		Origin:      "https://q.trap.jp",
 		ClientID:    "client-id",
-		Scopes:      []string{ScopeRead},
+		Scopes:      []string{"read"},
 		CreatedAt:   time.Now(),
 	}
 }
@@ -112,7 +112,7 @@ func TestManualSessionBrokenFile(t *testing.T) {
 	ss := newTestSessionStore(t)
 	path, err := ss.Save(testManualSession())
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte("{broken"), credentialsFilePerm))
+	require.NoError(t, os.WriteFile(path, []byte("{broken"), sessionFilePerm))
 
 	_, _, err = ss.Load(time.Now())
 	require.Error(t, err)
@@ -146,5 +146,5 @@ func TestManualSessionFilePerm(t *testing.T) {
 	require.NoError(t, err)
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(credentialsFilePerm), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(sessionFilePerm), info.Mode().Perm())
 }

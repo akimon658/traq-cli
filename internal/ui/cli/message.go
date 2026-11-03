@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/message"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
@@ -38,17 +37,12 @@ func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
-			rt, err := authSvc.ResolveToken(
-				cmd.Context(),
-				e.TokenOverride,
-				e.AccessToken,
-			)
+			api, err := resolveClient(cmd, e)
 			if err != nil {
 				return err
 			}
-			res, err := message.NewService(authSvc.Client(), authSvc).Send(
-				cmd.Context(), &rt, args[0], strings.Join(args[1:], " "),
+			res, err := message.NewService(api).Send(
+				cmd.Context(), args[0], strings.Join(args[1:], " "),
 			)
 			if err != nil {
 				return err
@@ -125,17 +119,12 @@ bot トークンでは未読が生成されないため、常に未読0件にな
 			if err := message.ValidateListOptions(opts); err != nil {
 				return err
 			}
-			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
-			rt, err := authSvc.ResolveToken(
-				cmd.Context(),
-				e.TokenOverride,
-				e.AccessToken,
-			)
+			api, err := resolveClient(cmd, e)
 			if err != nil {
 				return err
 			}
-			res, err := message.NewService(authSvc.Client(), authSvc).
-				List(cmd.Context(), &rt, args[0], opts)
+			res, err := message.NewService(api).
+				List(cmd.Context(), args[0], opts)
 			if err != nil {
 				return err
 			}

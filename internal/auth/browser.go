@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 )
+
+// callbackPath はループバックコールバックサーバーのパス。
+const callbackPath = "/callback"
 
 type CallbackServer struct {
 	srv    *http.Server
@@ -91,17 +92,4 @@ func (s *CallbackServer) handle(w http.ResponseWriter, r *http.Request) {
 	case s.result <- res:
 	default:
 	}
-}
-
-func (pk PKCE) AuthorizeURL(origin, clientID, redirectURI string, scopes []string) string {
-	q := url.Values{
-		"response_type":         {"code"},
-		"client_id":             {clientID},
-		"redirect_uri":          {redirectURI},
-		"scope":                 {strings.Join(scopes, " ")},
-		"state":                 {pk.State},
-		"code_challenge":        {pk.Challenge},
-		"code_challenge_method": {"S256"},
-	}
-	return origin + authorizePath + "?" + q.Encode()
 }

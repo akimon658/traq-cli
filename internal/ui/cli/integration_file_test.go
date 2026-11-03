@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 func TestFileDownload(t *testing.T) {
@@ -85,7 +85,7 @@ func uploadTestFile(t *testing.T, name string, content []byte) string {
 	defer func() { _ = f.Close() }()
 
 	info, _, err := botAPIClient(t).FileAPI.
-		PostFile(client.TokenContext(t.Context(), testTraqToken)).
+		PostFile(traq.TokenContext(t.Context(), testTraqToken)).
 		ChannelId(testGeneralChannelID(t)).
 		File(f).
 		Execute()

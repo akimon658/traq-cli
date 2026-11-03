@@ -1,10 +1,12 @@
-package auth
+package traq
 
 import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"math/big"
+	"net/url"
+	"strings"
 )
 
 const pkceAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
@@ -14,12 +16,14 @@ const (
 	pkceStateLength    = 32
 )
 
+// PKCE は OAuth2 authorization code flow (RFC 8252) の検証子・チャレンジ・状態を保持する。
 type PKCE struct {
 	Verifier  string
 	Challenge string
 	State     string
 }
 
+// NewPKCE はセキュア乱数で PKCE 検証子と状態を生成する。
 func NewPKCE() (PKCE, error) {
 	verifier, err := randString(pkceVerifierLength)
 	if err != nil {
@@ -36,6 +40,20 @@ func NewPKCE() (PKCE, error) {
 		Challenge: challenge,
 		State:     state,
 	}, nil
+}
+
+// AuthorizeURL は認可 URL を組み立てる。
+func (pk PKCE) AuthorizeURL(origin, clientID, redirectURI string, scopes []string) string {
+	q := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {clientID},
+		"redirect_uri":          {redirectURI},
+		"scope":                 {strings.Join(scopes, " ")},
+		"state":                 {pk.State},
+		"code_challenge":        {pk.Challenge},
+		"code_challenge_method": {"S256"},
+	}
+	return origin + authorizePath + "?" + q.Encode()
 }
 
 func randString(n int) (string, error) {

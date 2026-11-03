@@ -3,7 +3,6 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/file"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
@@ -45,17 +44,12 @@ func newFileDownloadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Co
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
-			rt, err := authSvc.ResolveToken(
-				cmd.Context(),
-				e.TokenOverride,
-				e.AccessToken,
-			)
+			api, err := resolveClient(cmd, e)
 			if err != nil {
 				return err
 			}
-			res, err := file.NewService(authSvc.Client(), authSvc).
-				Download(cmd.Context(), &rt, file.DownloadOptions{
+			res, err := file.NewService(api).
+				Download(cmd.Context(), file.DownloadOptions{
 					FileID: args[0],
 					Out:    out,
 					Force:  force,

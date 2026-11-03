@@ -3,7 +3,6 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/user"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
@@ -28,16 +27,11 @@ func newUserCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			authSvc := auth.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
-			rt, err := authSvc.ResolveToken(
-				cmd.Context(),
-				e.TokenOverride,
-				e.AccessToken,
-			)
+			api, err := resolveClient(cmd, e)
 			if err != nil {
 				return err
 			}
-			me, err := user.NewService(authSvc.Client(), authSvc).FetchMe(cmd.Context(), &rt)
+			me, err := user.NewService(api).FetchMe(cmd.Context())
 			if err != nil {
 				return err
 			}

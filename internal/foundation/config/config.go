@@ -5,13 +5,14 @@ import (
 	"os"
 
 	"github.com/akimon658/traq-cli/internal/auth"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // Env は実行設定を保持する。
 type Env struct {
 	Origin   string
 	ClientID string
-	Store    auth.Store
+	Store    traq.Store
 	// Sessions は手動ログイン (--manual) のセッション保存先。nil の場合は
 	// auth.NewDefaultSessionStore を使う。
 	Sessions auth.SessionStore
@@ -24,17 +25,17 @@ type Env struct {
 // NewEnv は環境変数から Env を作る。
 func NewEnv() *Env {
 	return &Env{
-		Origin:      cmp.Or(os.Getenv("TRAQ_ORIGIN"), auth.DefaultOrigin),
-		ClientID:    cmp.Or(os.Getenv("TRAQ_CLIENT_ID"), auth.DefaultClientID),
-		Store:       auth.NewDefaultStore(),
+		Origin:      cmp.Or(os.Getenv("TRAQ_ORIGIN"), traq.DefaultOrigin),
+		ClientID:    cmp.Or(os.Getenv("TRAQ_CLIENT_ID"), traq.DefaultClientID),
+		Store:       traq.NewDefaultStore(),
 		AccessToken: os.Getenv("TRAQ_ACCESS_TOKEN"),
 	}
 }
 
 // LoadStore は保存先を返す。nil の場合は既定の Store を使う。
-func (e *Env) LoadStore() auth.Store {
+func (e *Env) LoadStore() traq.Store {
 	if e.Store == nil {
-		return auth.NewDefaultStore()
+		return traq.NewDefaultStore()
 	}
 	return e.Store
 }

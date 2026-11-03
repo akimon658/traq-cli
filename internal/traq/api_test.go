@@ -1,4 +1,4 @@
-package client
+package traq
 
 import (
 	"net/http"
@@ -35,8 +35,10 @@ func TestGetUsersIncludesSuspended(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
-	users, _, err := c.GetUsers(TokenContext(t.Context(), "token"))
+	// 認証情報なし (--token 相当) のトークンでスコープ検査を素通りさせる。
+	svc := NewService(srv.URL, "test", nil, nil)
+	c := svc.WithToken(&ResolvedToken{Token: &Token{AccessToken: "token"}})
+	users, err := c.GetUsers(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "true", <-queries,
 		"include-suspended=true must be sent to resolve suspended users")

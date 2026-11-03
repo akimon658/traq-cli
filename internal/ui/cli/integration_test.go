@@ -16,12 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/compose"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 const testBotName = "traq-cli"
@@ -44,7 +43,7 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 	// OAuth ブラウザログインのタイムアウトはテストで hang を避けるため短縮する
-	auth.LoginTimeout = 30 * time.Second
+	traq.LoginTimeout = 30 * time.Second
 
 	ctx := context.Background()
 	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles("../../../compose.yaml"))
@@ -101,20 +100,20 @@ func TestMain(m *testing.M) {
 
 // traqClient は traqOrigin の traQ API を叩く go-traq クライアントを返す。
 // sess が Some の場合はセッションクッキーを全リクエストに付与する。
-func traqClient(traqOrigin string, sess optional.Option[*http.Cookie]) *traq.APIClient {
-	cfg := traq.NewConfiguration()
-	cfg.Servers = traq.ServerConfigurations{{URL: traqOrigin + "/api/v3"}}
+func traqClient(traqOrigin string, sess optional.Option[*http.Cookie]) *gotraq.APIClient {
+	cfg := gotraq.NewConfiguration()
+	cfg.Servers = gotraq.ServerConfigurations{{URL: traqOrigin + "/api/v3"}}
 	sess.IfSome(func(ck *http.Cookie) {
 		cfg.DefaultHeader["Cookie"] = ck.Name + "=" + ck.Value
 	})
-	return traq.NewAPIClient(cfg)
+	return gotraq.NewAPIClient(cfg)
 }
 
 // adminSession は traQ に管理者 (traq/traq) でログインし、セッションクッキーを返す。
 func adminSession(traqOrigin string) (*http.Cookie, error) {
 	resp, err := traqClient(traqOrigin, optional.None[*http.Cookie]()).
 		AuthenticationAPI.Login(context.Background()).
-		PostLoginRequest(traq.PostLoginRequest{Name: "traq", Password: "traq"}).
+		PostLoginRequest(gotraq.PostLoginRequest{Name: "traq", Password: "traq"}).
 		Execute()
 	if err != nil {
 		return nil, err
@@ -137,12 +136,12 @@ func createBotToken(traqOrigin string) (string, error) {
 	}
 	bot, _, err := traqClient(traqOrigin, optional.Some(session)).
 		BotAPI.CreateBot(context.Background()).
-		PostBotRequest(traq.PostBotRequest{
+		PostBotRequest(gotraq.PostBotRequest{
 			Name:        testBotName,
 			DisplayName: "traQ CLI",
 			Description: "traQ CLI integration test bot",
-			Mode:        traq.BOTMODE_HTTP,
-			Endpoint:    traq.PtrString("http://localhost"),
+			Mode:        gotraq.BOTMODE_HTTP,
+			Endpoint:    gotraq.PtrString("http://localhost"),
 		}).
 		Execute()
 	if err != nil {
@@ -172,39 +171,39 @@ func botEnv(t *testing.T, token string) *config.Env {
 }
 
 // botAPIClient はテストから traQ API を直接叩くための go-traq クライアントを返す。
-func botAPIClient(t *testing.T) *traq.APIClient {
+func botAPIClient(t *testing.T) *gotraq.APIClient {
 	t.Helper()
 	return traqAPIClient(t, optional.None[*http.Cookie]())
 }
 
-func getMe(t *testing.T, token string) *traq.MyUserDetail {
+func getMe(t *testing.T, token string) *gotraq.MyUserDetail {
 	t.Helper()
 	me, _, err := botAPIClient(t).MeAPI.GetMe(
-		client.TokenContext(t.Context(), token),
+		traq.TokenContext(t.Context(), token),
 	).Execute()
 	require.NoError(t, err, "failed to get the current user")
 	return me
 }
 
-func getMessage(t *testing.T, messageID string) *traq.Message {
+func getMessage(t *testing.T, messageID string) *gotraq.Message {
 	t.Helper()
 	msg, _, err := botAPIClient(t).MessageAPI.GetMessage(
-		client.TokenContext(t.Context(), testTraqToken), messageID,
+		traq.TokenContext(t.Context(), testTraqToken), messageID,
 	).Execute()
 	require.NoError(t, err, "failed to get message %s", messageID)
 	return msg
 }
 
-func getChannels(t *testing.T) *traq.ChannelList {
+func getChannels(t *testing.T) *gotraq.ChannelList {
 	t.Helper()
 	list, _, err := botAPIClient(t).ChannelAPI.GetChannels(
-		client.TokenContext(t.Context(), testTraqToken),
+		traq.TokenContext(t.Context(), testTraqToken),
 	).Execute()
 	require.NoError(t, err, "failed to get channels")
 	return list
 }
 
-func overrideEnv(t *testing.T, ms *auth.MockStore, clientIDs ...string) *config.Env {
+func overrideEnv(t *testing.T, ms *traq.MockStore, clientIDs ...string) *config.Env {
 	t.Helper()
 	clientID := "test"
 	if len(clientIDs) > 0 && clientIDs[0] != "" {

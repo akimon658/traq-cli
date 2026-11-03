@@ -3,12 +3,10 @@ package user
 import (
 	"context"
 	"fmt"
-	"net/http"
 
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/auth"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // FallbackLabel はユーザーIDが解決できなかったときの表示を返す。
@@ -18,40 +16,21 @@ func FallbackLabel(id string) string {
 }
 
 // Service はユーザー操作に必要な常駐依存を束ねる。
-// 通信路と認証は構築時に固定し、要求ごとの認証情報はメソッド引数で受ける。
+// 認証済みクライアントを構築時に固定し、要求ごとの値はメソッド引数で受ける。
 type Service struct {
-	client *client.Client
-	auth   *auth.Service
+	api *traq.Client
 }
 
 // NewService はユーザーサービスを作る。
-func NewService(client *client.Client, auth *auth.Service) *Service {
+func NewService(api *traq.Client) *Service {
 	return &Service{
-		client: client,
-		auth:   auth,
+		api: api,
 	}
 }
 
 // FetchMe は自分のユーザー詳細を取得する。
 func (s *Service) FetchMe(
 	ctx context.Context,
-	rt *auth.ResolvedToken,
-) (*traq.MyUserDetail, error) {
-	if err := auth.RequireScope(rt, auth.ScopeRead); err != nil {
-		return nil, err
-	}
-	var me *traq.MyUserDetail
-	if err := s.auth.Exec(
-		ctx,
-		rt,
-		func(ctx context.Context) (*http.Response, error) {
-			var resp *http.Response
-			var apiErr error
-			me, resp, apiErr = s.client.GetMe(ctx, rt.Token.AccessToken)
-			return resp, apiErr
-		},
-	); err != nil {
-		return nil, err
-	}
-	return me, nil
+) (*gotraq.MyUserDetail, error) {
+	return s.api.GetMe(ctx)
 }

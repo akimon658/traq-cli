@@ -14,6 +14,7 @@ import (
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // authorizeURLFromOutput は traq auth login --manual の出力から認可 URL の行を取り出す。
@@ -92,10 +93,10 @@ func TestAuthLoginManualFlow(t *testing.T) {
 	clientID, sess := prepareOAuth(t)
 
 	ctrl := gomock.NewController(t)
-	ms := auth.NewMockStore(ctrl)
+	ms := traq.NewMockStore(ctrl)
 	mp := auth.NewMockSessionStore(ctrl)
 	var pending auth.ManualSession
-	var saved auth.Token
+	var saved traq.Token
 	gomock.InOrder(
 		mp.EXPECT().Save(gomock.Any()).DoAndReturn(func(s auth.ManualSession) (string, error) {
 			pending = s
@@ -106,7 +107,7 @@ func TestAuthLoginManualFlow(t *testing.T) {
 				return pending, true, nil
 			},
 		).Times(1),
-		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok auth.Token) (string, error) {
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok traq.Token) (string, error) {
 			saved = tok
 			return "keychain", nil
 		}).Times(1),
@@ -122,7 +123,7 @@ func TestAuthLoginManualFlow(t *testing.T) {
 	assert.Equal(t, auth.ManualRedirectURI, pending.RedirectURI)
 	assert.Equal(t, testTraqOrigin, pending.Origin)
 	assert.Equal(t, clientID, pending.ClientID)
-	assert.Equal(t, []string{auth.ScopeRead}, pending.Scopes)
+	assert.Equal(t, []string{traq.ScopeRead}, pending.Scopes)
 	assert.NotEmpty(t, pending.Verifier)
 	assert.NotEmpty(t, pending.State)
 
@@ -132,8 +133,8 @@ func TestAuthLoginManualFlow(t *testing.T) {
 	assert.Contains(t, out, "signed in: @traq (user) scopes: read")
 	assert.Contains(t, out, "storage: keychain")
 
-	assert.Equal(t, auth.MethodOAuth, saved.Method)
-	assert.Equal(t, []string{auth.ScopeRead}, saved.Scope)
+	assert.Equal(t, traq.MethodOAuth, saved.Method)
+	assert.Equal(t, []string{traq.ScopeRead}, saved.Scope)
 	assert.Equal(t, "traq", saved.UserName)
 	assert.False(t, saved.UserBot)
 	assert.Equal(t, testTraqOrigin, saved.Origin)
@@ -147,7 +148,7 @@ func TestAuthLoginManualDenied(t *testing.T) {
 	clientID, sess := prepareOAuth(t)
 
 	ctrl := gomock.NewController(t)
-	ms := auth.NewMockStore(ctrl)
+	ms := traq.NewMockStore(ctrl)
 	mp := auth.NewMockSessionStore(ctrl)
 	gomock.InOrder(
 		// 拒否を parse した時点でエラーになるため Load / Save / Delete は呼ばれない
@@ -177,7 +178,7 @@ func TestAuthLoginManualStateMismatch(t *testing.T) {
 		},
 	).Times(1)
 	// state 不一致ではトークンを保存しない
-	ms := auth.NewMockStore(gomock.NewController(t))
+	ms := traq.NewMockStore(gomock.NewController(t))
 
 	e := &config.Env{Store: ms, Sessions: mp}
 	_, err := runCLI(
@@ -197,7 +198,7 @@ func TestAuthLoginManualNoPending(t *testing.T) {
 	mp := auth.NewMockSessionStore(gomock.NewController(t))
 	mp.EXPECT().Load(gomock.Any()).Return(auth.ManualSession{}, false, nil).Times(1)
 
-	e := &config.Env{Store: auth.NewMockStore(gomock.NewController(t)), Sessions: mp}
+	e := &config.Env{Store: traq.NewMockStore(gomock.NewController(t)), Sessions: mp}
 	_, err := runCLI(
 		t, e, "auth", "complete",
 		"https://q.trap.jp/callback?code=abc&state=s",
@@ -215,7 +216,7 @@ func TestAuthLoginManualUsage(t *testing.T) {
 	t.Run("no client id", func(t *testing.T) {
 		t.Parallel()
 		e := &config.Env{
-			Store:    auth.NewMockStore(gomock.NewController(t)),
+			Store:    traq.NewMockStore(gomock.NewController(t)),
 			Sessions: auth.NewMockSessionStore(gomock.NewController(t)),
 		}
 		_, err := runCLI(t, e, "auth", "login", "--manual")
@@ -251,7 +252,7 @@ func TestAuthCompleteUsage(t *testing.T) {
 	t.Parallel()
 
 	e := &config.Env{
-		Store:    auth.NewMockStore(gomock.NewController(t)),
+		Store:    traq.NewMockStore(gomock.NewController(t)),
 		Sessions: auth.NewMockSessionStore(gomock.NewController(t)),
 	}
 	for _, tc := range []struct {
