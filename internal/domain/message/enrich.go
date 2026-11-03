@@ -97,7 +97,7 @@ func (s *Service) fetchQuotesAndFiles(
 ) (map[string]traq.Message, map[string]traq.FileInfo) {
 	quoted := map[string]traq.Message{}
 	files := map[string]traq.FileInfo{}
-	quoteIDs, fileIDs := text.CollectAllEmbedIDs(contents, s.origin)
+	quoteIDs, fileIDs := text.CollectAllEmbedIDs(contents, s.origin())
 	for _, id := range quoteIDs {
 		var qm *traq.Message
 		_ = s.auth.Exec(

@@ -5,7 +5,6 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/file"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/ui/view"
@@ -55,8 +54,7 @@ func newFileDownloadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Co
 			if err != nil {
 				return err
 			}
-			c := client.New(e.Origin)
-			res, err := file.NewService(c, authSvc).
+			res, err := file.NewService(authSvc.Client(), authSvc).
 				Download(cmd.Context(), &rt, file.DownloadOptions{
 					FileID: args[0],
 					Out:    out,

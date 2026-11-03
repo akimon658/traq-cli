@@ -7,7 +7,6 @@ import (
 
 	"github.com/akimon658/traq-cli/internal/auth"
 	"github.com/akimon658/traq-cli/internal/domain/message"
-	"github.com/akimon658/traq-cli/internal/foundation/client"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/ui/view"
@@ -48,8 +47,7 @@ func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command
 			if err != nil {
 				return err
 			}
-			c := client.New(e.Origin)
-			res, err := message.NewService(e.Origin, c, authSvc).Send(
+			res, err := message.NewService(authSvc.Client(), authSvc).Send(
 				cmd.Context(), &rt, args[0], strings.Join(args[1:], " "),
 			)
 			if err != nil {
@@ -136,8 +134,7 @@ bot トークンでは未読が生成されないため、常に未読0件にな
 			if err != nil {
 				return err
 			}
-			c := client.New(e.Origin)
-			res, err := message.NewService(e.Origin, c, authSvc).
+			res, err := message.NewService(authSvc.Client(), authSvc).
 				List(cmd.Context(), &rt, args[0], opts)
 			if err != nil {
 				return err

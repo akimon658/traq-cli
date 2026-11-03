@@ -17,6 +17,7 @@ type Service struct {
 }
 
 // NewService は認証サービスを作る。
+// Client は Origin から1個だけ作り、コマンド内では Client() で共有すること。
 func NewService(origin, clientID string, store Store, sessions SessionStore) *Service {
 	return &Service{
 		origin:   origin,
@@ -25,6 +26,16 @@ func NewService(origin, clientID string, store Store, sessions SessionStore) *Se
 		sessions: sessions,
 		client:   client.New(origin),
 	}
+}
+
+// Origin は実行環境由来の origin を返す。表示用・トークン用の正典。
+func (s *Service) Origin() string {
+	return s.origin
+}
+
+// Client は共有する通信路を返す。呼び出し側で client.New を重ねないこと。
+func (s *Service) Client() *client.Client {
+	return s.client
 }
 
 // FinishRequest は認可コード交換に必要な要求ごとの値。
