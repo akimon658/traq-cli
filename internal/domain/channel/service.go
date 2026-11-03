@@ -40,7 +40,7 @@ func (s *Service) ResolveChannel(
 	}
 	channelID, err := FindByPath(list, path)
 	if err != nil {
-		return "", err
+		return "", exit.GeneralError(err)
 	}
 	if channelID == "" {
 		return "", exit.Generalf("channel not found: %s", target)

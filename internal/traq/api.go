@@ -78,7 +78,7 @@ type SearchQuery struct {
 }
 
 // 以下は生の API 呼び出しで、ctx には TokenContext でトークンが埋め込まれている前提。
-// トークン解決・スコープ検査・リトライは Client.do が行うため、直接呼ばないこと。
+// トークン解決・スコープ検査・リトライは Client が行うため、直接呼ばないこと。
 
 func (s *Service) rawGetMe(
 	ctx context.Context,

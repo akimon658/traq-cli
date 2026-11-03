@@ -78,7 +78,7 @@ func (s *Service) CompleteManualLogin(
 		sessClientID = sess.ClientID
 	}
 	// セッション保存時の origin/clientID を優先する。ここでの NewService は
-	// auth 内部で完結する唯一の例外生成点であり、呼び出し側で client を重ねて作らない。
+	// traq 内部で完結する唯一の例外生成点であり、呼び出し側で client を重ねて作らない。
 	finishSvc := NewService(sessOrigin, sessClientID, s.store, s.sessions)
 	t, venue, err := finishSvc.FinishLogin(
 		ctx,
