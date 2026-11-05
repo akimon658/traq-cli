@@ -8,7 +8,7 @@ import (
 // キャッシュサイズ。CLI は単発プロセスなので小さめでよい。
 // ID 単位のものだけ 128 件保持し、一覧系は単一エントリで十分である。
 const (
-	singleEntryCacheSize = 4
+	singleEntryCacheSize = 1
 	channelsCacheSize    = 2
 	perIDCacheSize       = 128
 )
