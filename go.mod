@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	github.com/99designs/keyring v1.2.2
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/moznion/go-optional v0.13.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1

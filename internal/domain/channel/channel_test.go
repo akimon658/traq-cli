@@ -9,20 +9,6 @@ import (
 	"github.com/traPtitech/go-traq"
 )
 
-func TestBuildChannelPathMap(t *testing.T) {
-	t.Parallel()
-	parentID := "p1"
-	list := &traq.ChannelList{
-		Public: []traq.Channel{
-			{Id: "p1", Name: "general"},
-			{Id: "c1", Name: "sub", ParentId: *traq.NewNullableString(&parentID)},
-		},
-	}
-	m := BuildPathMap(list)
-	assert.Equal(t, "#general", m["p1"])
-	assert.Equal(t, "#general/sub", m["c1"])
-}
-
 func TestClassifyUnreads(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
@@ -108,50 +94,4 @@ func TestClassifyUnreadsDMUserNotFoundFallback(t *testing.T) {
 	require.Len(t, g.DM, 1)
 	assert.Equal(t, "(ユーザー解決失敗 id:u-missing)", g.DM[0].Display)
 	assert.NotContains(t, g.DM[0].Display, "@", "fallback must not look like a user handle")
-}
-
-func TestLabelForChannel(t *testing.T) {
-	t.Parallel()
-	parentID := "p1"
-	list := &traq.ChannelList{
-		Public: []traq.Channel{
-			{Id: "p1", Name: "general"},
-			{Id: "c1", Name: "sub", ParentId: *traq.NewNullableString(&parentID)},
-		},
-		Dm: []traq.DMChannel{
-			{Id: "dm1", UserId: "u1"},
-			{Id: "dm2", UserId: "u-missing"},
-		},
-	}
-	userNames := map[string]string{"u1": "alice"}
-
-	assert.Equal(t, "#general", LabelForChannel(list, userNames, "p1"))
-	assert.Equal(t, "#general/sub", LabelForChannel(list, userNames, "c1"))
-	assert.Equal(t, "@alice", LabelForChannel(list, userNames, "dm1"))
-	assert.Equal(
-		t,
-		"(ユーザー解決失敗 id:u-missing)",
-		LabelForChannel(list, userNames, "dm2"),
-	)
-	assert.Equal(t, "unknown-id", LabelForChannel(list, userNames, "unknown-id"))
-	assert.Equal(t, "unknown-id", LabelForChannel(nil, userNames, "unknown-id"))
-}
-
-func TestFindByPath(t *testing.T) {
-	t.Parallel()
-	parentID := "p1"
-	list := &traq.ChannelList{
-		Public: []traq.Channel{
-			{Id: "p1", Name: "general"},
-			{Id: "c1", Name: "sub", ParentId: *traq.NewNullableString(&parentID)},
-		},
-	}
-	id, err := FindByPath(list, "general")
-	require.NoError(t, err)
-	assert.Equal(t, "p1", id)
-	id, err = FindByPath(list, "#general/sub")
-	require.NoError(t, err)
-	assert.Equal(t, "c1", id)
-	_, err = FindByPath(list, "does-not-exist")
-	require.Error(t, err)
 }

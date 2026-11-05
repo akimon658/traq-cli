@@ -3,7 +3,6 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/akimon658/traq-cli/internal/domain/user"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/ui/view"
@@ -31,7 +30,7 @@ func newUserCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			me, err := user.NewService(api).FetchMe(cmd.Context())
+			me, err := api.GetMe(cmd.Context())
 			if err != nil {
 				return err
 			}

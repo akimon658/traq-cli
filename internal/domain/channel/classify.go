@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/domain/user"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // Entry は表示用に解決済みの未読1件分。
@@ -40,7 +40,7 @@ type Tables struct {
 	Paths     map[string]string
 	DM        map[string]string
 	UserNames map[string]string
-	SubLevels map[string]traq.ChannelSubscribeLevel
+	SubLevels map[string]gotraq.ChannelSubscribeLevel
 	Stars     map[string]bool
 }
 
@@ -49,13 +49,13 @@ type Tables struct {
 // 公開・DMいずれにも解決できない channelID はエラーを返す。
 // DM相手ユーザが解決できない場合 (停止済みユーザー等) は解決失敗表示で続行する。
 func (t Tables) Classify(
-	unreads []traq.UnreadChannel,
+	unreads []gotraq.UnreadChannel,
 ) (Groups, error) {
 	var g Groups
 	for _, u := range unreads {
 		if userID, ok := t.DM[u.ChannelId]; ok {
 			name, ok := t.UserNames[userID]
-			display := user.FallbackLabel(userID)
+			display := traq.FormatUserFallback(userID)
 			if ok {
 				display = "@" + name
 			}
@@ -80,7 +80,7 @@ func (t Tables) Classify(
 		switch {
 		case u.Noticeable:
 			g.Mention = append(g.Mention, e)
-		case t.SubLevels[u.ChannelId] == traq.CHANNELSUBSCRIBELEVEL_notified:
+		case t.SubLevels[u.ChannelId] == gotraq.CHANNELSUBSCRIBELEVEL_notified:
 			g.Notified = append(g.Notified, e)
 		case t.Stars[u.ChannelId]:
 			g.Starred = append(g.Starred, e)

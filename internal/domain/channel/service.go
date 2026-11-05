@@ -2,8 +2,6 @@ package channel
 
 import (
 	"context"
-	"strings"
-	"uuid"
 
 	gotraq "github.com/traPtitech/go-traq"
 	"golang.org/x/sync/errgroup"
@@ -25,60 +23,8 @@ func NewService(api *traq.Client) *Service {
 	}
 }
 
-// ResolveChannel はチャンネル指定 (UUID または "#general/a/b" 形式のパス) を ID に解決する。
-func (s *Service) ResolveChannel(
-	ctx context.Context,
-	target string,
-) (string, error) {
-	if _, err := uuid.Parse(target); err == nil {
-		return target, nil
-	}
-	path := strings.TrimPrefix(target, "#")
-	list, err := s.api.GetChannels(ctx, true)
-	if err != nil {
-		return "", err
-	}
-	channelID, err := FindByPath(list, path)
-	if err != nil {
-		return "", exit.GeneralError(err)
-	}
-	if channelID == "" {
-		return "", exit.Generalf("channel not found: %s", target)
-	}
-	return channelID, nil
-}
-
-// LookupLabelByID はチャンネルIDから表示用ラベルを返す。
-// 公開チャンネルは "#a/b"、DM は "@name"。
-// 取得失敗・未解決のときは channelID をそのまま返す (UUID フォールバック)。
-func (s *Service) LookupLabelByID(
-	ctx context.Context,
-	channelID string,
-) string {
-	list, err := s.api.GetChannels(ctx, true)
-	if err != nil || list == nil {
-		return channelID
-	}
-	var userNames map[string]string
-	for _, dm := range list.Dm {
-		if dm.Id != channelID {
-			continue
-		}
-		users, uerr := s.api.GetUsers(ctx)
-		if uerr != nil {
-			break
-		}
-		userNames = make(map[string]string, len(users))
-		for _, u := range users {
-			userNames[u.Id] = u.Name
-		}
-		break
-	}
-	return LabelForChannel(list, userNames, channelID)
-}
-
-// FetchUnreadGroups は未読情報を取得し、表示用のグループに分類して返す。
-func (s *Service) FetchUnreadGroups(
+// GetUnreadGroups は未読情報を取得し、表示用のグループに分類して返す。
+func (s *Service) GetUnreadGroups(
 	ctx context.Context,
 ) (Groups, error) {
 	unreads, err := s.api.GetMyUnreadChannels(ctx)
@@ -89,63 +35,54 @@ func (s *Service) FetchUnreadGroups(
 		return Groups{}, nil
 	}
 
-	// 最初の取得でトークンは検証/更新済みのため、残りの独立した3取得は並列化する。
+	// 最初の取得でトークンは検証/更新済みのため、残りの独立した取得は並列化する。
 	// 各 goroutine はトークンのコピーを参照し、リトライ時の書き戻しのデータ競合だけを避ける。
 	// store は共有のため、並列中の同時401で同一 refresh token が複数回使われると2回目以降が失敗し得るが、最初の取得で検証済みのため可能性は低い。
-	var channelList *gotraq.ChannelList
-	var subs []gotraq.UserSubscribeState
-	var starIDs []string
+	// 取得結果の整形は traq 側のヘルパーが行い、ここでは引き回さない。
+	var (
+		pathMap   map[string]string
+		dmMap     map[string]string
+		userNames map[string]string
+		subLevels map[string]gotraq.ChannelSubscribeLevel
+		stars     map[string]bool
+	)
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		var err error
-		channelList, err = s.api.Clone().GetChannels(gctx, true)
+		pathMap, err = s.api.Clone().GetChannelPathMap(gctx)
 		return err
 	})
 	g.Go(func() error {
 		var err error
-		subs, err = s.api.Clone().GetMyChannelSubscriptions(gctx)
+		dmMap, err = s.api.Clone().GetDMUserMap(gctx)
 		return err
 	})
 	g.Go(func() error {
 		var err error
-		starIDs, err = s.api.Clone().GetMyStars(gctx)
+		subLevels, err = s.api.Clone().GetSubscriptionLevels(gctx)
+		return err
+	})
+	g.Go(func() error {
+		var err error
+		stars, err = s.api.Clone().GetStarSet(gctx)
 		return err
 	})
 	if err := g.Wait(); err != nil {
 		return Groups{}, err
 	}
 
-	pathMap := BuildPathMap(channelList)
-	dmMap := make(map[string]string, len(channelList.Dm))
-	for _, dm := range channelList.Dm {
-		dmMap[dm.Id] = dm.UserId
-	}
-
-	userNames := map[string]string{}
-	needUsers := false
 	for _, u := range unreads {
 		if _, ok := dmMap[u.ChannelId]; ok {
-			needUsers = true
+			names, err := s.api.GetUserNameMap(ctx)
+			if err != nil {
+				return Groups{}, err
+			}
+			userNames = names
 			break
 		}
 	}
-	if needUsers {
-		users, err := s.api.GetUsers(ctx)
-		if err != nil {
-			return Groups{}, err
-		}
-		for _, u := range users {
-			userNames[u.Id] = u.Name
-		}
-	}
-
-	subLevels := make(map[string]gotraq.ChannelSubscribeLevel, len(subs))
-	for _, sub := range subs {
-		subLevels[sub.ChannelId] = sub.Level
-	}
-	stars := make(map[string]bool, len(starIDs))
-	for _, id := range starIDs {
-		stars[id] = true
+	if userNames == nil {
+		userNames = map[string]string{}
 	}
 
 	groups, err := Tables{
