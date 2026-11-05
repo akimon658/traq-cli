@@ -77,10 +77,19 @@ type SearchViewParams struct {
 	CommonParams
 }
 
-// SingleViewParams は send 直後の1件表示用の入力。
+// SingleViewParams は send / get の1件表示用の入力。
 type SingleViewParams struct {
 	Msg traq.Message
 	CommonParams
+}
+
+// common は MessageList から描画用の共通情報を抜き出す。
+func (ml MessageList) common() CommonParams {
+	return CommonParams{
+		Users: ml.Users, Stamps: ml.Stamps, Loc: ml.Loc,
+		Origin: ml.Origin, Quoted: ml.Quoted, Files: ml.Files,
+		SelfID: ml.SelfID, MyGroups: ml.MyGroups,
+	}
 }
 
 // Build は ListViewParams から MessageList を作る。
@@ -99,15 +108,6 @@ func (p SearchViewParams) Build() MessageList {
 		Label: p.Label, Limit: p.Limit, Offset: p.Offset, Sort: p.Sort,
 		TotalHits: optional.Some(p.TotalHits),
 		Msgs:      p.Msgs, Users: p.Users, Stamps: p.Stamps, Loc: p.Loc,
-		Origin: p.Origin, Quoted: p.Quoted, Files: p.Files,
-		SelfID: p.SelfID, MyGroups: p.MyGroups,
-	}
-}
-
-// Build は SingleViewParams から MessageList を作る。
-func (p SingleViewParams) Build() MessageList {
-	return MessageList{
-		Msgs: []traq.Message{p.Msg}, Users: p.Users, Stamps: p.Stamps, Loc: p.Loc,
 		Origin: p.Origin, Quoted: p.Quoted, Files: p.Files,
 		SelfID: p.SelfID, MyGroups: p.MyGroups,
 	}
@@ -166,11 +166,11 @@ func WriteMessageList(w io.Writer, ml MessageList) error {
 	}
 
 	var blocks []string
-	for i, m := range msgs {
+	for i, msg := range msgs {
 		if i == dividerAt {
 			blocks = append(blocks, divider)
 		}
-		block, err := FormatMessage(m, ml)
+		block, err := FormatMessage(msg, ml.common())
 		if err != nil {
 			return err
 		}
@@ -191,12 +191,9 @@ func WriteMessageList(w io.Writer, ml MessageList) error {
 	return nil
 }
 
-// WriteSingleMessage は投稿直後のメッセージ1件を list/search と同じ形式で出力する。
-func WriteSingleMessage(w io.Writer, ml MessageList) error {
-	if len(ml.Msgs) == 0 {
-		return nil
-	}
-	block, err := FormatMessage(ml.Msgs[0], ml)
+// WriteSingleMessage はメッセージ1件を list/search と同じ形式で出力する。
+func WriteSingleMessage(w io.Writer, params SingleViewParams) error {
+	block, err := FormatMessage(params.Msg, params.CommonParams)
 	if err != nil {
 		return err
 	}
@@ -217,25 +214,27 @@ func UnreadDivider(u traq.UnreadChannel) string {
 }
 
 // FormatMessage はメッセージ1件を表示用ブロックに整形する。
-func FormatMessage(m traq.Message, ml MessageList) (string, error) {
-	loc := ml.Loc
+func FormatMessage(msg traq.Message, common CommonParams) (string, error) {
+	loc := common.Loc
 	if loc == nil {
 		loc = time.Local
 	}
 	header := fmt.Sprintf(
 		"%s %s id:%s",
-		m.CreatedAt.In(loc).Format(time.RFC3339),
-		UserDisplay(m.UserId, ml.Users),
-		m.Id,
+		msg.CreatedAt.In(loc).Format(time.RFC3339),
+		UserDisplay(msg.UserId, common.Users),
+		msg.Id,
 	)
-	if !m.UpdatedAt.Equal(m.CreatedAt) {
+	if !msg.UpdatedAt.Equal(msg.CreatedAt) {
 		header += " [edited]"
 	}
-	if m.Pinned {
+	if msg.Pinned {
 		header += " [pinned]"
 	}
 
-	clean := text.CleanContentWithHighlight(m.Content, ml.Origin, ml.SelfID, ml.MyGroups)
+	clean := text.CleanContentWithHighlight(
+		msg.Content, common.Origin, common.SelfID, common.MyGroups,
+	)
 	if clean.SelfMentioned {
 		header += " [to you]"
 	}
@@ -251,15 +250,15 @@ func FormatMessage(m traq.Message, ml MessageList) (string, error) {
 		}
 	}
 	for _, qid := range clean.QuoteIDs {
-		lines = append(lines, FormatQuote(qid, ml)...)
+		lines = append(lines, FormatQuote(qid, common)...)
 	}
 	if len(clean.FileIDs) > 0 {
 		lines = append(lines, "添付ファイル")
 		for _, fid := range clean.FileIDs {
-			lines = append(lines, "  "+FormatFile(fid, ml.Files))
+			lines = append(lines, "  "+FormatFile(fid, common.Files))
 		}
 	}
-	if items := FormatStampItems(m.Stamps, ml.Stamps); len(items) > 0 {
+	if items := FormatStampItems(msg.Stamps, common.Stamps); len(items) > 0 {
 		lines = append(lines, "スタンプ")
 		for _, it := range items {
 			lines = append(lines, "  "+it)
@@ -269,16 +268,16 @@ func FormatMessage(m traq.Message, ml MessageList) (string, error) {
 }
 
 // FormatQuote は引用1件分の行群を返す。取得失敗時はヘッダー1行のみ。
-func FormatQuote(id string, ml MessageList) []string {
-	qm, ok := ml.Quoted[id]
+func FormatQuote(quoteID string, common CommonParams) []string {
+	qm, ok := common.Quoted[quoteID]
 	if !ok {
-		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", id)}
+		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", quoteID)}
 	}
-	loc := ml.Loc
+	loc := common.Loc
 	if loc == nil {
 		loc = time.Local
 	}
-	label := UserDisplay(qm.UserId, ml.Users)
+	label := UserDisplay(qm.UserId, common.Users)
 	header := fmt.Sprintf(
 		"引用 %s %s id:%s",
 		label,
@@ -290,7 +289,7 @@ func FormatQuote(id string, ml MessageList) []string {
 	}
 	lines := []string{header}
 	if body := text.RenderQuoteBodyWithHighlight(
-		qm.Content, ml.SelfID, ml.MyGroups,
+		qm.Content, common.SelfID, common.MyGroups,
 	); body != "" {
 		for _, line := range strings.Split(body, "\n") {
 			if line == "" {

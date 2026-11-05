@@ -306,7 +306,7 @@ func TestWriteMessageListUserNotFoundFallback(t *testing.T) {
 func TestFormatQuoteUserNotFoundFallback(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	ml := MessageList{
+	common := CommonParams{
 		Users: map[string]traq.User{},
 		Loc:   time.UTC,
 		Quoted: map[string]traq.Message{
@@ -319,7 +319,7 @@ func TestFormatQuoteUserNotFoundFallback(t *testing.T) {
 			},
 		},
 	}
-	lines := FormatQuote("q1", ml)
+	lines := FormatQuote("q1", common)
 	out := strings.Join(lines, "\n")
 	assert.Contains(t, out, "(ユーザー解決失敗 id:gone)")
 	assert.NotContains(
@@ -529,4 +529,27 @@ func TestFormatQuoteSelfMentionDoesNotLightHeader(t *testing.T) {
 	assert.Contains(t, out, "引用 @bob 2026-10-17T10:00:00Z id:q1")
 	assert.Contains(t, out, "  hi @alice [to you]")
 	assert.NotContains(t, out, "id:m1 [to you]", "header must not light up from a quoted mention")
+}
+
+func TestWriteSingleMessage(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	var buf bytes.Buffer
+	require.NoError(t, WriteSingleMessage(&buf, SingleViewParams{
+		Msg: traq.Message{
+			Id: "m1", UserId: "u1", Content: "hello",
+			CreatedAt: base, UpdatedAt: base,
+		},
+		CommonParams: CommonParams{
+			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+			Stamps: map[string]string{},
+			Loc:    time.UTC,
+		},
+	}))
+	want := strings.Join([]string{
+		"2026-10-17T10:00:00Z @alice id:m1",
+		"  hello",
+		"",
+	}, "\n")
+	assert.Equal(t, want, buf.String())
 }

@@ -1,0 +1,30 @@
+package message
+
+import (
+	"context"
+	"time"
+)
+
+// Get はメッセージを1件取得し、表示用の付随情報と共に返す。
+func (s *Service) Get(
+	ctx context.Context,
+	messageID string,
+) (GetResult, error) {
+	if err := ValidateMessageID(messageID); err != nil {
+		return GetResult{}, err
+	}
+	msg, err := s.api.GetMessage(ctx, messageID)
+	if err != nil {
+		return GetResult{}, err
+	}
+	enrich, err := s.FetchEnrichment(ctx, []string{msg.Content})
+	if err != nil {
+		return GetResult{}, err
+	}
+	return GetResult{
+		Msg:        *msg,
+		Enrichment: enrich,
+		Loc:        time.Local,
+		Origin:     s.origin(),
+	}, nil
+}

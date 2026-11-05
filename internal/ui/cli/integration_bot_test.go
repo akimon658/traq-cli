@@ -73,6 +73,36 @@ func TestMessageSendChannelNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "channel not found")
 }
 
+func TestMessageGet(t *testing.T) {
+	t.Parallel()
+	requireTraqStack(t)
+
+	e := botEnv(t, testTraqToken)
+	content := "get-" + strings.ReplaceAll(uuid.New().String(), "-", "")
+	out, err := runCLI(t, e, "message", "send", "#general", content)
+	require.NoError(t, err, "message send failed")
+	m := messageIDPattern.FindStringSubmatch(out)
+	require.Len(t, m, 2, "no message id in the output: %s", out)
+
+	out, err = runCLI(t, e, "message", "get", m[1])
+	require.NoError(t, err, "message get failed")
+	assert.NotContains(t, out, `"id"`, "output should be human-readable text, not JSON")
+	assert.Contains(t, out, content)
+	assert.Contains(t, out, "id:"+m[1])
+	assert.Contains(t, out, "@BOT_traq-cli", "the author name should be resolved")
+}
+
+func TestMessageGetNotFound(t *testing.T) {
+	t.Parallel()
+	requireTraqStack(t)
+
+	_, err := runCLI(t, botEnv(t, testTraqToken), "message", "get", uuid.New().String())
+	require.Error(t, err, "expected an error for the nonexistent message")
+	var ec *exit.Error
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, exit.General, ec.Code)
+}
+
 func TestMessageList(t *testing.T) {
 	t.Parallel()
 	requireTraqStack(t)

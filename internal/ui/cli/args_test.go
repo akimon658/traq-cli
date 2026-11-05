@@ -35,6 +35,26 @@ func TestMessageSearchInvalidFlags(t *testing.T) {
 	}
 }
 
+func TestMessageGetInvalidArgs(t *testing.T) {
+	t.Parallel()
+
+	e := botEnv(t, "")
+	cases := map[string][]string{
+		"no-arg":     {"message", "get"},
+		"too-many":   {"message", "get", "33333333-3333-3333-3333-333333333333", "extra"},
+		"invalid-id": {"message", "get", "not-a-uuid"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := runCLI(t, e, args...)
+			var ec *exit.Error
+			require.ErrorAs(t, err, &ec)
+			assert.Equal(t, exit.Usage, ec.Code)
+		})
+	}
+}
+
 func TestChannelUnreadRejectsArgs(t *testing.T) {
 	t.Parallel()
 	e := botEnv(t, "")

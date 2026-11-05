@@ -83,3 +83,11 @@ type SendResult struct {
 	Loc    *time.Location
 	Origin string
 }
+
+// GetResult は message get の結果 (1件)。
+type GetResult struct {
+	Msg traq.Message
+	Enrichment
+	Loc    *time.Location
+	Origin string
+}
