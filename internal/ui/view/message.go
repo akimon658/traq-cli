@@ -338,18 +338,44 @@ func FormatFile(id string, files map[string]traq.FileInfo) string {
 	return fmt.Sprintf("%s (%s, %d bytes, id:%s)", fi.Name, fi.Mime, fi.Size, fi.Id)
 }
 
-// FormatStampItems はスタンプを API 返却順 (traQ-S_UI と同じく押された順) に ":name: ×count" の一覧で返す。
+// FormatStampItems はスタンプを stampId で集約し、最初に押された順
+// (traQ_S-UI の createStampList と同等) に ":name: ×sum" の一覧で返す。
 func FormatStampItems(stamps []traq.MessageStamp, names map[string]string) []string {
 	if len(stamps) == 0 {
 		return nil
 	}
-	parts := make([]string, 0, len(stamps))
-	for _, s := range stamps {
-		name, ok := names[s.StampId]
+	type aggregated struct {
+		stampID    string
+		sum        int32
+		createdAt  time.Time
+		firstIndex int
+	}
+	byID := make(map[string]*aggregated, len(stamps))
+	order := make([]*aggregated, 0, len(stamps))
+	for i, s := range stamps {
+		a, ok := byID[s.StampId]
 		if !ok {
-			name = s.StampId
+			a = &aggregated{stampID: s.StampId, createdAt: s.CreatedAt, firstIndex: i}
+			byID[s.StampId] = a
+			order = append(order, a)
+		} else if s.CreatedAt.Before(a.createdAt) {
+			a.createdAt = s.CreatedAt
 		}
-		parts = append(parts, fmt.Sprintf(":%s: ×%d", name, s.Count))
+		a.sum += s.Count
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		if !order[i].createdAt.Equal(order[j].createdAt) {
+			return order[i].createdAt.Before(order[j].createdAt)
+		}
+		return order[i].firstIndex < order[j].firstIndex
+	})
+	parts := make([]string, 0, len(order))
+	for _, a := range order {
+		name, ok := names[a.stampID]
+		if !ok {
+			name = a.stampID
+		}
+		parts = append(parts, fmt.Sprintf(":%s: ×%d", name, a.sum))
 	}
 	return parts
 }
