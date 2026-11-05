@@ -2,7 +2,6 @@ package message
 
 import (
 	"context"
-	"time"
 )
 
 // Send はチャンネルにメッセージを投稿し、表示用の付随情報と共に返す。
@@ -19,8 +18,6 @@ func (s *Service) Send(
 		return SendResult{}, err
 	}
 	return SendResult{
-		Msg:    *msg,
-		Loc:    time.Local,
-		Origin: s.origin(),
+		Msg: *msg,
 	}, nil
 }

@@ -13,11 +13,6 @@ import (
 	"github.com/akimon658/traq-cli/internal/traq"
 )
 
-// stubEnrichment は表示用の Origin 取得の happy path をモックする。
-func stubEnrichment(mc *traq.MockClient) {
-	mc.EXPECT().Origin().Return("https://q.trap.jp").AnyTimes()
-}
-
 func TestService_Send(t *testing.T) {
 	t.Parallel()
 
@@ -28,7 +23,6 @@ func TestService_Send(t *testing.T) {
 		mc := traq.NewMockClient(gomock.NewController(t))
 		mc.EXPECT().ResolveChannelID(gomock.Any(), "#general").Return("c1", nil)
 		mc.EXPECT().PostMessage(gomock.Any(), "c1", "hello").Return(msg, nil)
-		stubEnrichment(mc)
 
 		res, err := NewService(mc).Send(t.Context(), "#general", "hello")
 		require.NoError(t, err)
@@ -40,7 +34,6 @@ func TestService_Send(t *testing.T) {
 		mc := traq.NewMockClient(gomock.NewController(t))
 		mc.EXPECT().ResolveChannelID(gomock.Any(), "c1").Return("c1", nil)
 		mc.EXPECT().PostMessage(gomock.Any(), "c1", "hello").Return(msg, nil)
-		stubEnrichment(mc)
 
 		_, err := NewService(mc).Send(t.Context(), "c1", "hello")
 		require.NoError(t, err)

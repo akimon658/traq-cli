@@ -2,7 +2,6 @@ package message
 
 import (
 	"context"
-	"time"
 )
 
 // Get はメッセージを1件取得し、表示用の付随情報と共に返す。
@@ -20,7 +19,5 @@ func (s *Service) Get(
 	return GetResult{
 		Msg:          *msg,
 		ChannelLabel: s.api.GetChannelLabel(ctx, msg.ChannelId),
-		Loc:          time.Local,
-		Origin:       s.origin(),
 	}, nil
 }

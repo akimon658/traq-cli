@@ -23,7 +23,6 @@ func TestService_Get(t *testing.T) {
 		mc := traq.NewMockClient(gomock.NewController(t))
 		mc.EXPECT().GetMessage(gomock.Any(), messageID).Return(msg, nil)
 		mc.EXPECT().GetChannelLabel(gomock.Any(), "c1").Return("#general")
-		stubEnrichment(mc)
 
 		res, err := NewService(mc).Get(t.Context(), messageID)
 		require.NoError(t, err)

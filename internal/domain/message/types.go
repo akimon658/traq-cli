@@ -1,8 +1,6 @@
 package message
 
 import (
-	"time"
-
 	"github.com/moznion/go-optional"
 	"github.com/traPtitech/go-traq"
 )
@@ -45,12 +43,10 @@ type ListResult struct {
 	Offset int
 	Order  string
 	Msgs   []traq.Message
-	Loc    *time.Location
 	Unread optional.Option[traq.UnreadChannel]
 	// UnreadOnly が true なら未読メッセージのみを表示するモード。
 	// Unread が None のときは未読0件として出力する。
 	UnreadOnly bool
-	Origin     string
 }
 
 // SearchResult は message search の結果。
@@ -61,15 +57,11 @@ type SearchResult struct {
 	Sort      string
 	TotalHits int64
 	Msgs      []traq.Message
-	Loc       *time.Location
-	Origin    string
 }
 
 // SendResult は message send の結果 (投稿直後の1件)。
 type SendResult struct {
-	Msg    traq.Message
-	Loc    *time.Location
-	Origin string
+	Msg traq.Message
 }
 
 // GetResult は message get の結果 (1件)。
@@ -78,6 +70,4 @@ type GetResult struct {
 	// ChannelLabel は投稿先チャンネルの表示用ラベル ("#a/b" / DM は "@name")。
 	// 解決できないときはチャンネル UUID。
 	ChannelLabel string
-	Loc          *time.Location
-	Origin       string
 }

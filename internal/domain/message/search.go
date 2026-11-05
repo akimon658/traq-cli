@@ -3,7 +3,6 @@ package message
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/moznion/go-optional"
 
@@ -89,8 +88,6 @@ func (s *Service) Search(
 		Sort:      opts.Sort,
 		TotalHits: result.TotalHits,
 		Msgs:      result.Hits,
-		Loc:       time.Local,
-		Origin:    s.origin(),
 	}, nil
 }
 

@@ -30,7 +30,6 @@ func TestService_Search(t *testing.T) {
 		t.Parallel()
 		mc := traq.NewMockClient(gomock.NewController(t))
 		mc.EXPECT().SearchMessages(gomock.Any(), gomock.Any()).Return(hits, nil)
-		stubEnrichment(mc)
 
 		res, err := NewService(mc).Search(t.Context(), "foo", validSearchOptions())
 		require.NoError(t, err)
@@ -92,7 +91,6 @@ func TestService_Search(t *testing.T) {
 		mc.EXPECT().SearchMessages(gomock.Any(), gomock.Any()).Return(
 			&gotraq.MessageSearchResult{TotalHits: 0, Hits: []gotraq.Message{}}, nil,
 		)
-		mc.EXPECT().Origin().Return("https://q.trap.jp").AnyTimes()
 
 		res, err := NewService(mc).Search(t.Context(), "foo", validSearchOptions())
 		require.NoError(t, err)
@@ -111,7 +109,6 @@ func TestService_Search(t *testing.T) {
 				return hits, nil
 			},
 		)
-		stubEnrichment(mc)
 
 		_, err := NewService(mc).Search(t.Context(), "foo", validSearchOptions())
 		require.NoError(t, err)

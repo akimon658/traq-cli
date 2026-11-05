@@ -104,10 +104,8 @@ func (s *Service) List(
 		Offset:     opts.Offset,
 		Order:      opts.Order,
 		Msgs:       msgs,
-		Loc:        time.Local,
 		Unread:     unread,
 		UnreadOnly: opts.UnreadOnly,
-		Origin:     s.origin(),
 	}, nil
 }
 
