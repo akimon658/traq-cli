@@ -12,7 +12,7 @@ import (
 func TestMessageSearchInvalidFlags(t *testing.T) {
 	t.Parallel()
 
-	e := botEnv(t, "")
+	e := unitEnv()
 	cases := map[string][]string{
 		"limit-low":    {"message", "search", "foo", "--limit", "0"},
 		"limit-high":   {"message", "search", "foo", "--limit", "101"},
@@ -38,7 +38,7 @@ func TestMessageSearchInvalidFlags(t *testing.T) {
 func TestMessageGetInvalidArgs(t *testing.T) {
 	t.Parallel()
 
-	e := botEnv(t, "")
+	e := unitEnv()
 	cases := map[string][]string{
 		"no-arg":     {"message", "get"},
 		"too-many":   {"message", "get", "33333333-3333-3333-3333-333333333333", "extra"},
@@ -55,9 +55,30 @@ func TestMessageGetInvalidArgs(t *testing.T) {
 	}
 }
 
+func TestMessageListInvalidFlags(t *testing.T) {
+	t.Parallel()
+
+	e := unitEnv()
+	cases := map[string][]string{
+		"limit":  {"message", "list", "#general", "--limit", "0"},
+		"offset": {"message", "list", "#general", "--offset=-1"},
+		"order":  {"message", "list", "#general", "--order", "up"},
+		"since":  {"message", "list", "#general", "--since", "not-a-time"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := runCLI(t, e, args...)
+			var ec *exit.Error
+			require.ErrorAs(t, err, &ec)
+			assert.Equal(t, exit.Usage, ec.Code)
+		})
+	}
+}
+
 func TestChannelUnreadRejectsArgs(t *testing.T) {
 	t.Parallel()
-	e := botEnv(t, "")
+	e := unitEnv()
 	_, err := runCLI(t, e, "channel", "unread", "extra")
 	require.Error(t, err)
 }
@@ -65,7 +86,7 @@ func TestChannelUnreadRejectsArgs(t *testing.T) {
 func TestFileDownloadInvalidArgs(t *testing.T) {
 	t.Parallel()
 
-	e := botEnv(t, "")
+	e := unitEnv()
 	cases := map[string][]string{
 		"no-arg":     {"file", "download"},
 		"too-many":   {"file", "download", "33333333-3333-3333-3333-333333333333", "extra"},

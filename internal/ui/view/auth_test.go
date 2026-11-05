@@ -11,40 +11,44 @@ import (
 	"github.com/akimon658/traq-cli/internal/traq"
 )
 
-func TestWriteAuthStatusBot(t *testing.T) {
+func TestWriteAuthStatus(t *testing.T) {
 	t.Parallel()
-	var buf bytes.Buffer
-	require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "environment", traq.Token{
-		Method:   traq.MethodBot,
-		UserID:   "user-id",
-		UserName: "BOT_x",
-		UserBot:  true,
-	}))
-	out := buf.String()
-	assert.Contains(t, out, "origin: https://example.com")
-	assert.Contains(t, out, "source: environment")
-	assert.Contains(t, out, "method: bot")
-	assert.Contains(t, out, "user: @BOT_x")
-	assert.Contains(t, out, "userId: user-id")
-	assert.NotContains(t, out, `"origin"`)
-	assert.NotContains(t, out, "scopes:")
-}
 
-func TestWriteAuthStatusOAuth(t *testing.T) {
-	t.Parallel()
-	expires := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
-	var buf bytes.Buffer
-	require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "keychain", traq.Token{
-		Method:    traq.MethodOAuth,
-		Scope:     []string{traq.ScopeRead},
-		UserID:    "user-id",
-		UserName:  "alice",
-		ExpiresAt: expires,
-	}))
-	out := buf.String()
-	assert.Contains(t, out, "method: oauth")
-	assert.Contains(t, out, "scopes: read")
-	assert.Contains(t, out, "expiresAt: 2026-10-18T10:00:00Z")
+	t.Run("bot", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "environment", traq.Token{
+			Method:   traq.MethodBot,
+			UserID:   "user-id",
+			UserName: "BOT_x",
+			UserBot:  true,
+		}))
+		out := buf.String()
+		assert.Contains(t, out, "origin: https://example.com")
+		assert.Contains(t, out, "source: environment")
+		assert.Contains(t, out, "method: bot")
+		assert.Contains(t, out, "user: @BOT_x")
+		assert.Contains(t, out, "userId: user-id")
+		assert.NotContains(t, out, `"origin"`)
+		assert.NotContains(t, out, "scopes:")
+	})
+
+	t.Run("oauth", func(t *testing.T) {
+		t.Parallel()
+		expires := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
+		var buf bytes.Buffer
+		require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "keychain", traq.Token{
+			Method:    traq.MethodOAuth,
+			Scope:     []string{traq.ScopeRead},
+			UserID:    "user-id",
+			UserName:  "alice",
+			ExpiresAt: expires,
+		}))
+		out := buf.String()
+		assert.Contains(t, out, "method: oauth")
+		assert.Contains(t, out, "scopes: read")
+		assert.Contains(t, out, "expiresAt: 2026-10-18T10:00:00Z")
+	})
 }
 
 func TestAuthStatusMethod(t *testing.T) {

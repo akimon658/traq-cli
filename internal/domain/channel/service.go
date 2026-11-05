@@ -13,11 +13,11 @@ import (
 // Service はチャンネル操作に必要な常駐依存を束ねる。
 // 認証済みクライアントを構築時に固定し、要求ごとの値はメソッド引数で受ける。
 type Service struct {
-	api *traq.Client
+	api traq.Client
 }
 
 // NewService はチャンネルサービスを作る。
-func NewService(api *traq.Client) *Service {
+func NewService(api traq.Client) *Service {
 	return &Service{
 		api: api,
 	}

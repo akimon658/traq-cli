@@ -1,33 +1,28 @@
-package cli
+package traq
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/moznion/go-optional"
-	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/compose"
 	"github.com/testcontainers/testcontainers-go/wait"
 	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
-	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 const testBotName = "traq-cli"
 
 var (
 	testTraqOrigin string
-	testTraqToken  string
+	testBotToken   string
 	traqStackReady bool
 )
 
@@ -43,10 +38,10 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 	// OAuth ブラウザログインのタイムアウトはテストで hang を避けるため短縮する
-	traq.LoginTimeout = 30 * time.Second
+	LoginTimeout = 30 * time.Second
 
 	ctx := context.Background()
-	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles("../../../compose.yaml"))
+	stack, err := compose.NewDockerComposeWith(compose.WithStackFiles("../../compose.yaml"))
 	if err != nil {
 		panic(fmt.Sprintf("failed to create compose stack: %v", err))
 	}
@@ -80,7 +75,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to create a bot in %s: %v", testTraqOrigin, err))
 	}
-	testTraqToken = token
+	testBotToken = token
 	traqStackReady = true
 
 	code := m.Run()
@@ -96,6 +91,20 @@ func TestMain(m *testing.M) {
 		}
 	}
 	os.Exit(code)
+}
+
+func requireTraqStack(t *testing.T) {
+	t.Helper()
+	if !traqStackReady {
+		t.Skip("traQ test stack is not running (try without -short)")
+	}
+}
+
+// testBotClient は Bot トークンに束縛された Client を返す。
+func testBotClient(t *testing.T) Client {
+	t.Helper()
+	return NewService(testTraqOrigin, "test", nil, nil).
+		WithToken(&ResolvedToken{Token: &Token{AccessToken: testBotToken}})
 }
 
 // traqClient は traqOrigin の traQ API を叩く go-traq クライアントを返す。
@@ -153,68 +162,20 @@ func createBotToken(traqOrigin string) (string, error) {
 	return bot.Tokens.AccessToken, nil
 }
 
-func runCLI(t *testing.T, e *config.Env, args ...string) (string, error) {
+// testGeneralChannelID は #general のチャンネル ID を返す。
+func testGeneralChannelID(t *testing.T) string {
 	t.Helper()
-	cmd := newRootCmd(func() *config.Env { return e })
-	cmd.SetArgs(args)
-	var stdout, stderr bytes.Buffer
-	cmd.SetOut(&stdout)
-	cmd.SetErr(&stderr)
-	execErr := cmd.Execute()
-	return strings.TrimRight(stdout.String(), "\n"), execErr
-}
-
-// botEnv は bot トークンを環境変数経由で渡すのと等価な Env を返す。
-func botEnv(t *testing.T, token string) *config.Env {
-	t.Helper()
-	return &config.Env{Origin: testTraqOrigin, AccessToken: token}
-}
-
-// botAPIClient はテストから traQ API を直接叩くための go-traq クライアントを返す。
-func botAPIClient(t *testing.T) *gotraq.APIClient {
-	t.Helper()
-	return traqAPIClient(t, optional.None[*http.Cookie]())
-}
-
-func getMe(t *testing.T, token string) *gotraq.MyUserDetail {
-	t.Helper()
-	me, _, err := botAPIClient(t).MeAPI.GetMe(
-		traq.TokenContext(t.Context(), token),
-	).Execute()
-	require.NoError(t, err, "failed to get the current user")
-	return me
-}
-
-func getMessage(t *testing.T, messageID string) *gotraq.Message {
-	t.Helper()
-	msg, _, err := botAPIClient(t).MessageAPI.GetMessage(
-		traq.TokenContext(t.Context(), testTraqToken), messageID,
-	).Execute()
-	require.NoError(t, err, "failed to get message %s", messageID)
-	return msg
-}
-
-func getChannels(t *testing.T) *gotraq.ChannelList {
-	t.Helper()
-	list, _, err := botAPIClient(t).ChannelAPI.GetChannels(
-		traq.TokenContext(t.Context(), testTraqToken),
-	).Execute()
-	require.NoError(t, err, "failed to get channels")
-	return list
-}
-
-func overrideEnv(t *testing.T, ms *traq.MockStore, clientIDs ...string) *config.Env {
-	t.Helper()
-	clientID := "test"
-	if len(clientIDs) > 0 && clientIDs[0] != "" {
-		clientID = clientIDs[0]
+	list, _, err := traqClient(testTraqOrigin, optional.None[*http.Cookie]()).
+		ChannelAPI.GetChannels(TokenContext(t.Context(), testBotToken)).
+		Execute()
+	if err != nil {
+		t.Fatalf("failed to get channels: %v", err)
 	}
-	return &config.Env{Origin: testTraqOrigin, ClientID: clientID, Store: ms}
-}
-
-func requireTraqStack(t *testing.T) {
-	t.Helper()
-	if !traqStackReady {
-		t.Skip("traQ test stack is not running (try without -short)")
+	for _, ch := range list.Public {
+		if ch.Name == "general" && ch.Id != "" {
+			return ch.Id
+		}
 	}
+	t.Fatal("channel general not found in the response")
+	return ""
 }

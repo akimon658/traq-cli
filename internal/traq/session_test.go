@@ -1,6 +1,9 @@
 package traq
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -11,65 +14,104 @@ import (
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
-func TestResolveTokenPrefersEnvironment(t *testing.T) {
+func TestService_ResolveToken(t *testing.T) {
 	t.Parallel()
-	ms := NewMockStore(gomock.NewController(t))
-	svc := NewService(DefaultOrigin, "client", ms, nil)
-	rt, err := svc.ResolveToken(t.Context(), "", "env-token")
-	require.NoError(t, err)
-	assert.Equal(t, "environment", rt.Source)
-	assert.Equal(t, "env-token", rt.Token.AccessToken)
-}
 
-func TestResolveTokenPrefersFlag(t *testing.T) {
-	t.Parallel()
-	ms := NewMockStore(gomock.NewController(t))
-	svc := NewService(DefaultOrigin, "client", ms, nil)
-	rt, err := svc.ResolveToken(t.Context(), "flag-token", "env-token")
-	require.NoError(t, err)
-	assert.Equal(t, "flag", rt.Source)
-	assert.Equal(t, "flag-token", rt.Token.AccessToken)
-}
+	t.Run("prefers environment", func(t *testing.T) {
+		t.Parallel()
+		ms := NewMockStore(gomock.NewController(t))
+		svc := NewService(DefaultOrigin, "client", ms, nil)
+		rt, err := svc.ResolveToken(t.Context(), "", "env-token")
+		require.NoError(t, err)
+		assert.Equal(t, "environment", rt.Source)
+		assert.Equal(t, "env-token", rt.Token.AccessToken)
+	})
 
-func TestResolveTokenFromStore(t *testing.T) {
-	t.Parallel()
-	ms := NewMockStore(gomock.NewController(t))
-	ms.EXPECT().Load().Return(Token{
-		Method:      MethodOAuth,
-		AccessToken: "stored-token",
-		Scope:       []string{ScopeRead},
-		Origin:      DefaultOrigin,
-		ExpiresAt:   time.Now().Add(24 * time.Hour),
-	}, "keychain", true, nil).Times(1)
-	svc := NewService(DefaultOrigin, "client", ms, nil)
-	rt, err := svc.ResolveToken(t.Context(), "", "")
-	require.NoError(t, err)
-	assert.Equal(t, "keychain", rt.Source)
-	assert.Equal(t, "stored-token", rt.Token.AccessToken)
-}
+	t.Run("prefers flag", func(t *testing.T) {
+		t.Parallel()
+		ms := NewMockStore(gomock.NewController(t))
+		svc := NewService(DefaultOrigin, "client", ms, nil)
+		rt, err := svc.ResolveToken(t.Context(), "flag-token", "env-token")
+		require.NoError(t, err)
+		assert.Equal(t, "flag", rt.Source)
+		assert.Equal(t, "flag-token", rt.Token.AccessToken)
+	})
 
-func TestResolveTokenNotAuthenticated(t *testing.T) {
-	t.Parallel()
-	ms := NewMockStore(gomock.NewController(t))
-	ms.EXPECT().Load().Return(Token{}, "", false, nil).Times(1)
-	svc := NewService(DefaultOrigin, "client", ms, nil)
-	_, err := svc.ResolveToken(t.Context(), "", "")
-	var ec *exit.Error
-	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exit.AuthRequired, ec.Code)
-}
+	t.Run("from store", func(t *testing.T) {
+		t.Parallel()
+		ms := NewMockStore(gomock.NewController(t))
+		ms.EXPECT().Load().Return(Token{
+			Method:      MethodOAuth,
+			AccessToken: "stored-token",
+			Scope:       []string{ScopeRead},
+			Origin:      DefaultOrigin,
+			ExpiresAt:   time.Now().Add(24 * time.Hour),
+		}, "keychain", true, nil).Times(1)
+		svc := NewService(DefaultOrigin, "client", ms, nil)
+		rt, err := svc.ResolveToken(t.Context(), "", "")
+		require.NoError(t, err)
+		assert.Equal(t, "keychain", rt.Source)
+		assert.Equal(t, "stored-token", rt.Token.AccessToken)
+	})
 
-func TestResolveTokenExpiredWithoutRefreshToken(t *testing.T) {
-	t.Parallel()
-	ms := NewMockStore(gomock.NewController(t))
-	ms.EXPECT().Load().Return(Token{
-		Method:      MethodOAuth,
-		AccessToken: "expired-token",
-		ExpiresAt:   time.Now().Add(-1 * time.Hour),
-	}, "keychain", true, nil).Times(1)
-	svc := NewService(DefaultOrigin, "client", ms, nil)
-	_, err := svc.ResolveToken(t.Context(), "", "")
-	var ec *exit.Error
-	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, exit.AuthRequired, ec.Code)
+	t.Run("not authenticated", func(t *testing.T) {
+		t.Parallel()
+		ms := NewMockStore(gomock.NewController(t))
+		ms.EXPECT().Load().Return(Token{}, "", false, nil).Times(1)
+		svc := NewService(DefaultOrigin, "client", ms, nil)
+		_, err := svc.ResolveToken(t.Context(), "", "")
+		var ec *exit.Error
+		require.ErrorAs(t, err, &ec)
+		assert.Equal(t, exit.AuthRequired, ec.Code)
+	})
+
+	t.Run("expired without refresh token", func(t *testing.T) {
+		t.Parallel()
+		ms := NewMockStore(gomock.NewController(t))
+		ms.EXPECT().Load().Return(Token{
+			Method:      MethodOAuth,
+			AccessToken: "expired-token",
+			ExpiresAt:   time.Now().Add(-1 * time.Hour),
+		}, "keychain", true, nil).Times(1)
+		svc := NewService(DefaultOrigin, "client", ms, nil)
+		_, err := svc.ResolveToken(t.Context(), "", "")
+		var ec *exit.Error
+		require.ErrorAs(t, err, &ec)
+		assert.Equal(t, exit.AuthRequired, ec.Code)
+	})
+
+	t.Run("expired refreshes and saves", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/v3/oauth2/token", r.URL.Path)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "new-access",
+				"refresh_token": "new-refresh",
+				"expires_in":    3600,
+				"scope":         "read",
+			})
+		}))
+		defer srv.Close()
+
+		ms := NewMockStore(gomock.NewController(t))
+		stored := Token{
+			Method:       MethodOAuth,
+			AccessToken:  "old-access",
+			RefreshToken: "old-refresh",
+			Scope:        []string{ScopeRead},
+			Origin:       srv.URL,
+			ExpiresAt:    time.Now().Add(-time.Hour),
+		}
+		ms.EXPECT().Load().Return(stored, "keychain", true, nil).Times(1)
+		ms.EXPECT().Save(gomock.Any()).DoAndReturn(func(tok Token) (string, error) {
+			assert.Equal(t, "new-access", tok.AccessToken)
+			assert.Equal(t, "new-refresh", tok.RefreshToken)
+			return "keychain", nil
+		}).Times(1)
+		svc := NewService(srv.URL, "client", ms, nil)
+		rt, err := svc.ResolveToken(t.Context(), "", "")
+		require.NoError(t, err)
+		assert.Equal(t, "new-access", rt.Token.AccessToken)
+	})
 }

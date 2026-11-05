@@ -9,11 +9,11 @@ import (
 // Origin は traq.Client を正典とし、Service 内で重ねて保持しない。
 // 詳細な責務分界は docs/architecture.md を参照すること。
 type Service struct {
-	api *traq.Client
+	api traq.Client
 }
 
 // NewService はメッセージサービスを作る。
-func NewService(api *traq.Client) *Service {
+func NewService(api traq.Client) *Service {
 	return &Service{
 		api: api,
 	}

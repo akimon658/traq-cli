@@ -28,6 +28,18 @@ func TestValidateFileID(t *testing.T) {
 func TestResolveDestPath(t *testing.T) {
 	t.Parallel()
 
+	t.Run("parent is file", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		parent := filepath.Join(dir, "file")
+		require.NoError(t, os.WriteFile(parent, []byte("x"), 0o600))
+
+		_, err := resolveDestPath(filepath.Join(parent, "a.pdf"), "a.pdf", testFileID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not a directory")
+	})
+
 	dir := t.TempDir()
 
 	cases := map[string]struct {
@@ -83,58 +95,50 @@ func TestResolveDestPath(t *testing.T) {
 	}
 }
 
-func TestResolveDestPathParentIsFile(t *testing.T) {
+func TestCopyTo(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	parent := filepath.Join(dir, "file")
-	require.NoError(t, os.WriteFile(parent, []byte("x"), 0o600))
+	t.Run("does not overwrite without force", func(t *testing.T) {
+		t.Parallel()
 
-	_, err := resolveDestPath(filepath.Join(parent, "a.pdf"), "a.pdf", testFileID)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not a directory")
-}
+		dir := t.TempDir()
+		dst := filepath.Join(dir, "a.txt")
+		require.NoError(t, os.WriteFile(dst, []byte("old"), 0o600))
 
-func TestCopyToDoesNotOverwriteWithoutForce(t *testing.T) {
-	t.Parallel()
+		_, err := copyTo(dst, strings.NewReader("new"), false)
+		require.Error(t, err)
 
-	dir := t.TempDir()
-	dst := filepath.Join(dir, "a.txt")
-	require.NoError(t, os.WriteFile(dst, []byte("old"), 0o600))
+		got, err := os.ReadFile(dst)
+		require.NoError(t, err)
+		assert.Equal(t, "old", string(got))
+	})
 
-	_, err := copyTo(dst, strings.NewReader("new"), false)
-	require.Error(t, err)
+	t.Run("overwrites with force", func(t *testing.T) {
+		t.Parallel()
 
-	got, err := os.ReadFile(dst)
-	require.NoError(t, err)
-	assert.Equal(t, "old", string(got))
-}
+		dir := t.TempDir()
+		dst := filepath.Join(dir, "a.txt")
+		require.NoError(t, os.WriteFile(dst, []byte("old"), 0o600))
 
-func TestCopyToOverwritesWithForce(t *testing.T) {
-	t.Parallel()
+		n, err := copyTo(dst, strings.NewReader("new"), true)
+		require.NoError(t, err)
+		assert.Equal(t, int64(3), n)
 
-	dir := t.TempDir()
-	dst := filepath.Join(dir, "a.txt")
-	require.NoError(t, os.WriteFile(dst, []byte("old"), 0o600))
+		got, err := os.ReadFile(dst)
+		require.NoError(t, err)
+		assert.Equal(t, "new", string(got))
+	})
 
-	n, err := copyTo(dst, strings.NewReader("new"), true)
-	require.NoError(t, err)
-	assert.Equal(t, int64(3), n)
+	t.Run("writes new file", func(t *testing.T) {
+		t.Parallel()
 
-	got, err := os.ReadFile(dst)
-	require.NoError(t, err)
-	assert.Equal(t, "new", string(got))
-}
+		dst := filepath.Join(t.TempDir(), "a.txt")
+		n, err := copyTo(dst, strings.NewReader("hello"), false)
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), n)
 
-func TestCopyToWritesNewFile(t *testing.T) {
-	t.Parallel()
-
-	dst := filepath.Join(t.TempDir(), "a.txt")
-	n, err := copyTo(dst, strings.NewReader("hello"), false)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5), n)
-
-	got, err := os.ReadFile(dst)
-	require.NoError(t, err)
-	assert.Equal(t, "hello", string(got))
+		got, err := os.ReadFile(dst)
+		require.NoError(t, err)
+		assert.Equal(t, "hello", string(got))
+	})
 }
