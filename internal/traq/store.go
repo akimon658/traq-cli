@@ -139,7 +139,9 @@ func (s defaultStore) Delete() (bool, error) {
 		if _, e := r.Get(storeItem); e == nil {
 			found = true
 		}
-		_ = r.Remove(storeItem)
+		if rerr := r.Remove(storeItem); rerr != nil && !errors.Is(rerr, keyring.ErrKeyNotFound) {
+			return found, rerr
+		}
 	}
 	path, err := s.filePath()
 	if err != nil {

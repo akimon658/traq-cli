@@ -3,6 +3,7 @@ package traq
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"uuid"
 
@@ -37,6 +38,11 @@ func (c *ClientImpl) ResolveChannelID(ctx context.Context, target string) (strin
 func (c *ClientImpl) GetChannelLabel(ctx context.Context, channelID string) string {
 	list, err := c.GetChannels(ctx, true)
 	if err != nil || list == nil {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "warning: failed to resolve channel list:", err)
+		} else {
+			fmt.Fprintln(os.Stderr, "warning: failed to resolve channel list: nil list")
+		}
 		return channelID
 	}
 	var userNames map[string]string
@@ -46,6 +52,7 @@ func (c *ClientImpl) GetChannelLabel(ctx context.Context, channelID string) stri
 		}
 		names, uerr := c.GetUserNameMap(ctx)
 		if uerr != nil {
+			fmt.Fprintln(os.Stderr, "warning: failed to resolve user names:", uerr)
 			break
 		}
 		userNames = names

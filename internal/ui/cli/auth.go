@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"runtime"
 
@@ -83,9 +84,18 @@ OAuth2 クライアント ID が未登録の場合は TRAQ_CLIENT_ID または -
 func runLogin(cmd *cobra.Command, newEnv func() *config.Env, flags *globalFlags) error {
 	e := newEnv()
 	flags.apply(cmd, e)
-	browser, _ := cmd.Flags().GetBool("browser")
-	manual, _ := cmd.Flags().GetBool("manual")
-	scopeFlag, _ := cmd.Flags().GetString("scope")
+	browser, err := cmd.Flags().GetBool("browser")
+	if err != nil {
+		return err
+	}
+	manual, err := cmd.Flags().GetBool("manual")
+	if err != nil {
+		return err
+	}
+	scopeFlag, err := cmd.Flags().GetString("scope")
+	if err != nil {
+		return err
+	}
 	svc := traq.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
 
 	if cmd.Flags().Changed("token") {
@@ -207,5 +217,7 @@ func openBrowser(url string) {
 	default:
 		return
 	}
-	_ = cmd.Start()
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: failed to open browser:", err)
+	}
 }

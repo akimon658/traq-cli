@@ -3,6 +3,7 @@ version: "2"
 linters:
   enable:
     - depguard
+    - errcheck
     - mnd
     - revive
     - usetesting
@@ -13,6 +14,16 @@ linters:
           deny:
             - pkg: github.com/google/uuid
               desc: Use uuid package in std, which is available since Go 1.27
+    errcheck:
+      check-blank: true
+      exclude-functions:
+        - (*net/http.Server).Serve
+        - (*net/http.Server).Close
+        - fmt.Fprint
+        - fmt.Fprintln
+        - os.Remove
+        - (*os.File).Close
+        - (io.Closer).Close
     revive:
       rules:
         - name: argument-limit
@@ -23,6 +34,11 @@ linters:
     usetesting:
       context-background: true
       context-todo: true
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
 
 formatters:
   enable:
