@@ -9,17 +9,25 @@ import (
 	"github.com/akimon658/traq-cli/internal/ui/view"
 )
 
-func newChannelCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newChannelCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	channelCmd := &cobra.Command{
 		Use:     "channel",
 		Aliases: []string{"channels"},
 		Short:   "チャンネル操作サブコマンド",
 	}
-	channelCmd.AddCommand(newChannelUnreadCmd(newEnv, flags))
+	channelCmd.AddCommand(newChannelUnreadCmd(newEnv, resolve, flags))
 	return channelCmd
 }
 
-func newChannelUnreadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newChannelUnreadCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	unreadCmd := &cobra.Command{
 		Use:   "unread",
 		Short: "未読チャンネル一覧を取得する",
@@ -34,7 +42,7 @@ func newChannelUnreadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			api, err := resolveClient(cmd, e)
+			api, err := resolve(cmd, e)
 			if err != nil {
 				return err
 			}

@@ -30,10 +30,22 @@ docker compose down --volumes
 go test ./...
 ```
 
-`internal/ui/cli` のテストは Testcontainers で compose.yaml の実 traQ サーバーを起動し、
-CLI コマンドの実行結果を検証する。Docker が必要で、起動待ちなどにより完了まで1〜2分かかる。
+`internal/traq` のテストは Testcontainers で compose.yaml の実 traQ サーバーを起動し、
+`Client`・`Service` の実サーバーとの往復を検証する。Docker が必要で、起動待ちなどにより完了まで1〜2分かかる。
 メッセージ検索の検証では ES の反映遅延をポーリングで吸収する。
 
-- Docker が無い環境や素早く回したい場合は `go test -short ./...` で統合テストをスキップできる。`-short` で回るのは次の単体テストである。
-  `foundation/text` / `ui/view` / `domain/channel` / `domain/message` / `internal/auth`。実サーバーは不要である。
-- 単体と結合の住み分けは `architecture.md` に従う。
+- Docker が無い環境や素早く回したい場合は `go test -short ./...` で実サーバーを使うテストをスキップできる。`-short` で回るのは実サーバー不要の単体テストである。
+  `foundation/text` / `ui/view` / `domain/channel` / `domain/message` / `domain/file` / `internal/auth` / `ui/cli`。実サーバーは不要である。
+- `ui/cli` で実サーバーは叩かない。配線の確認はモックで行う。
+
+## モック生成
+
+インターフェースを変更したときは、リポジトリルートで以下を実行してモックを再生成する。
+
+```sh
+go generate ./...
+```
+
+`//go:generate` の `-destination` はパッケージディレクトリからの相対パスで書かれている。
+リポジトリルートから `go tool mockgen -destination=internal/traq/mock_client.go ...` のように手動実行して destination を上書きしないこと。
+生成ヘッダーがずれて、次回の `go generate` で余計な差分が出る。

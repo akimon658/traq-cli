@@ -10,7 +10,11 @@ import (
 	"github.com/akimon658/traq-cli/internal/ui/view"
 )
 
-func newMessageSearchCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newMessageSearchCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	var (
 		in             string
 		from           []string
@@ -71,7 +75,7 @@ func newMessageSearchCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 			if err := message.ValidateSearchOptions(word, opts); err != nil {
 				return err
 			}
-			api, err := resolveClient(cmd, e)
+			api, err := resolve(cmd, e)
 			if err != nil {
 				return err
 			}

@@ -42,8 +42,8 @@ func (s *Service) Origin() string {
 // WithToken は解決済みトークンに束縛された認証済みクライアントを返す。
 // 以降の API 呼び出しはトークン注入・スコープ検査・401時リトライを内包するため、
 // 呼び出し側は ctx のみを渡せばよい。
-func (s *Service) WithToken(rt *ResolvedToken) *Client {
-	return &Client{svc: s, rt: rt}
+func (s *Service) WithToken(rt *ResolvedToken) Client {
+	return &ClientImpl{svc: s, rt: rt}
 }
 
 // FinishRequest は認可コード交換に必要な要求ごとの値。

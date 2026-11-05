@@ -11,31 +11,31 @@ import (
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
 
-// Client は解決済みトークンに束縛された認証済みクライアントである。
+// ClientImpl は解決済みトークンに束縛された認証済みクライアントである。
 // Service.WithToken で作り、トークン注入・スコープ検査・401時リトライ・エラー整形を内包する。
 // 一覧系と ID 単位の取得は対象別 LRU で保持し、同一プロセス内の重複呼び出しを抑える。
 // 呼び出し側は ctx のみを渡せばよく、*http.Response やトークンを意識しない。
-type Client struct {
+type ClientImpl struct {
 	svc *Service
 	rt  *ResolvedToken
 }
 
 // Origin は表示用・埋め込み検出用の origin を返す。正典は Service。
-func (c *Client) Origin() string {
+func (c *ClientImpl) Origin() string {
 	return c.svc.origin
 }
 
 // Clone はトークンを値コピーした独立クライアントを返す。
 // 並列取得で各 goroutine が別トークンを参照し、リトライ時の書き戻しの
 // データ競合を避けるために使う。キャッシュは svc 経由で共有される。
-func (c *Client) Clone() *Client {
+func (c *ClientImpl) Clone() Client {
 	tok := *c.rt.Token
-	return &Client{svc: c.svc, rt: &ResolvedToken{Token: &tok, Source: c.rt.Source}}
+	return &ClientImpl{svc: c.svc, rt: &ResolvedToken{Token: &tok, Source: c.rt.Source}}
 }
 
 // requireScope は保存済み OAuth トークンのスコープを事前検査する。
 // Bot トークンやスコープ不明な手動トークン (--token) は検査せず、サーバーの判定に委ねる。
-func (c *Client) requireScope(scope string) error {
+func (c *ClientImpl) requireScope(scope string) error {
 	if c.rt.Token.LacksScope(scope) {
 		required := scope
 		if scope == ScopeWrite {
@@ -55,7 +55,7 @@ func (c *Client) requireScope(scope string) error {
 // exec runs fn with token injection and one 401 retry, returning the value.
 func exec[T any](
 	ctx context.Context,
-	c *Client,
+	c *ClientImpl,
 	fn func(ctx context.Context) (T, *http.Response, error),
 ) (T, error) {
 	var zero T
@@ -83,7 +83,7 @@ func exec[T any](
 }
 
 // GetMe は自分のユーザー詳細を取得する。
-func (c *Client) GetMe(ctx context.Context) (*traq.MyUserDetail, error) {
+func (c *ClientImpl) GetMe(ctx context.Context) (*traq.MyUserDetail, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (c *Client) GetMe(ctx context.Context) (*traq.MyUserDetail, error) {
 }
 
 // PostMessage はチャンネルにメッセージを投稿する。
-func (c *Client) PostMessage(
+func (c *ClientImpl) PostMessage(
 	ctx context.Context, channelID, content string,
 ) (*traq.Message, error) {
 	if err := c.requireScope(ScopeWrite); err != nil {
@@ -111,7 +111,7 @@ func (c *Client) PostMessage(
 }
 
 // GetChannelMessages はチャンネルのメッセージを取得する。
-func (c *Client) GetChannelMessages(
+func (c *ClientImpl) GetChannelMessages(
 	ctx context.Context,
 	channelID string,
 	q MessageQuery,
@@ -125,7 +125,7 @@ func (c *Client) GetChannelMessages(
 }
 
 // SearchMessages はメッセージを検索する。
-func (c *Client) SearchMessages(
+func (c *ClientImpl) SearchMessages(
 	ctx context.Context,
 	q SearchQuery,
 ) (*traq.MessageSearchResult, error) {
@@ -142,7 +142,7 @@ func (c *Client) SearchMessages(
 }
 
 // GetUsers は停止済みユーザーを含む全ユーザーを取得する。
-func (c *Client) GetUsers(ctx context.Context) ([]traq.User, error) {
+func (c *ClientImpl) GetUsers(ctx context.Context) ([]traq.User, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (c *Client) GetUsers(ctx context.Context) ([]traq.User, error) {
 }
 
 // GetMyUnreadChannels は未読情報を取得する。
-func (c *Client) GetMyUnreadChannels(ctx context.Context) ([]traq.UnreadChannel, error) {
+func (c *ClientImpl) GetMyUnreadChannels(ctx context.Context) ([]traq.UnreadChannel, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (c *Client) GetMyUnreadChannels(ctx context.Context) ([]traq.UnreadChannel,
 }
 
 // GetChannels はチャンネル一覧を取得する。
-func (c *Client) GetChannels(ctx context.Context, includeDm bool) (*traq.ChannelList, error) {
+func (c *ClientImpl) GetChannels(ctx context.Context, includeDm bool) (*traq.ChannelList, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -192,7 +192,9 @@ func (c *Client) GetChannels(ctx context.Context, includeDm bool) (*traq.Channel
 }
 
 // GetMyChannelSubscriptions はチャンネル購読状態を取得する。
-func (c *Client) GetMyChannelSubscriptions(ctx context.Context) ([]traq.UserSubscribeState, error) {
+func (c *ClientImpl) GetMyChannelSubscriptions(
+	ctx context.Context,
+) ([]traq.UserSubscribeState, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -208,7 +210,7 @@ func (c *Client) GetMyChannelSubscriptions(ctx context.Context) ([]traq.UserSubs
 }
 
 // GetMyStars はお気に入りチャンネルを取得する。
-func (c *Client) GetMyStars(ctx context.Context) ([]string, error) {
+func (c *ClientImpl) GetMyStars(ctx context.Context) ([]string, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -224,7 +226,7 @@ func (c *Client) GetMyStars(ctx context.Context) ([]string, error) {
 }
 
 // GetStamps はスタンプ一覧を取得する。
-func (c *Client) GetStamps(ctx context.Context) ([]traq.StampWithThumbnail, error) {
+func (c *ClientImpl) GetStamps(ctx context.Context) ([]traq.StampWithThumbnail, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -240,7 +242,7 @@ func (c *Client) GetStamps(ctx context.Context) ([]traq.StampWithThumbnail, erro
 }
 
 // GetMessage はメッセージを取得する。
-func (c *Client) GetMessage(ctx context.Context, messageID string) (*traq.Message, error) {
+func (c *ClientImpl) GetMessage(ctx context.Context, messageID string) (*traq.Message, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -258,7 +260,7 @@ func (c *Client) GetMessage(ctx context.Context, messageID string) (*traq.Messag
 }
 
 // GetFileMeta はファイルメタ情報を取得する。
-func (c *Client) GetFileMeta(ctx context.Context, fileID string) (*traq.FileInfo, error) {
+func (c *ClientImpl) GetFileMeta(ctx context.Context, fileID string) (*traq.FileInfo, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}
@@ -277,7 +279,7 @@ func (c *Client) GetFileMeta(ctx context.Context, fileID string) (*traq.FileInfo
 
 // GetFile はファイル本体を取得する。
 // 返り値のファイルは呼び出し側が Close と Remove を行うこと。
-func (c *Client) GetFile(ctx context.Context, fileID string) (*os.File, error) {
+func (c *ClientImpl) GetFile(ctx context.Context, fileID string) (*os.File, error) {
 	if err := c.requireScope(ScopeRead); err != nil {
 		return nil, err
 	}

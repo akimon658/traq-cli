@@ -30,121 +30,125 @@ func testManualSession() ManualSession {
 	}
 }
 
-func TestManualSessionRoundTrip(t *testing.T) {
+func TestManualSession(t *testing.T) {
 	t.Parallel()
-	ss := newTestSessionStore(t)
-	now := time.Now()
 
-	want := testManualSession()
-	path, err := ss.Save(want)
-	require.NoError(t, err)
-	assert.True(t, filepath.IsAbs(path))
+	t.Run("round trip", func(t *testing.T) {
+		t.Parallel()
+		ss := newTestSessionStore(t)
+		now := time.Now()
 
-	got, found, err := ss.Load(now)
-	require.NoError(t, err)
-	assert.True(t, found)
-	// JSON 往復で monotonic clock が落ちるため、CreatedAt は時刻として比較する
-	assert.WithinDuration(t, want.CreatedAt, got.CreatedAt, 0)
-	assert.Equal(t, want.Verifier, got.Verifier)
-	assert.Equal(t, want.State, got.State)
-	assert.Equal(t, want.RedirectURI, got.RedirectURI)
-	assert.Equal(t, want.Origin, got.Origin)
-	assert.Equal(t, want.ClientID, got.ClientID)
-	assert.Equal(t, want.Scopes, got.Scopes)
+		want := testManualSession()
+		path, err := ss.Save(want)
+		require.NoError(t, err)
+		assert.True(t, filepath.IsAbs(path))
 
-	found, err = ss.Delete()
-	require.NoError(t, err)
-	assert.True(t, found)
+		got, found, err := ss.Load(now)
+		require.NoError(t, err)
+		assert.True(t, found)
+		// JSON 往復で monotonic clock が落ちるため、CreatedAt は時刻として比較する
+		assert.WithinDuration(t, want.CreatedAt, got.CreatedAt, 0)
+		assert.Equal(t, want.Verifier, got.Verifier)
+		assert.Equal(t, want.State, got.State)
+		assert.Equal(t, want.RedirectURI, got.RedirectURI)
+		assert.Equal(t, want.Origin, got.Origin)
+		assert.Equal(t, want.ClientID, got.ClientID)
+		assert.Equal(t, want.Scopes, got.Scopes)
 
-	_, found, err = ss.Load(now)
-	require.NoError(t, err)
-	assert.False(t, found)
-}
+		found, err = ss.Delete()
+		require.NoError(t, err)
+		assert.True(t, found)
 
-func TestManualSessionMissing(t *testing.T) {
-	t.Parallel()
-	ss := newTestSessionStore(t)
+		_, found, err = ss.Load(now)
+		require.NoError(t, err)
+		assert.False(t, found)
+	})
 
-	_, found, err := ss.Load(time.Now())
-	require.NoError(t, err)
-	assert.False(t, found)
+	t.Run("missing", func(t *testing.T) {
+		t.Parallel()
+		ss := newTestSessionStore(t)
 
-	found, err = ss.Delete()
-	require.NoError(t, err)
-	assert.False(t, found)
-}
+		_, found, err := ss.Load(time.Now())
+		require.NoError(t, err)
+		assert.False(t, found)
 
-func TestManualSessionExpired(t *testing.T) {
-	t.Parallel()
-	ss := newTestSessionStore(t)
+		found, err = ss.Delete()
+		require.NoError(t, err)
+		assert.False(t, found)
+	})
 
-	sess := testManualSession()
-	sess.CreatedAt = time.Now().Add(-ManualSessionTTL - time.Minute)
-	_, err := ss.Save(sess)
-	require.NoError(t, err)
+	t.Run("expired", func(t *testing.T) {
+		t.Parallel()
+		ss := newTestSessionStore(t)
 
-	_, found, err := ss.Load(time.Now())
-	require.NoError(t, err)
-	assert.False(t, found, "expired session should be removed")
+		sess := testManualSession()
+		sess.CreatedAt = time.Now().Add(-ManualSessionTTL - time.Minute)
+		_, err := ss.Save(sess)
+		require.NoError(t, err)
 
-	// 期限切れセッションは Load 時に削除される
-	_, found, err = ss.Load(time.Now())
-	require.NoError(t, err)
-	assert.False(t, found)
-}
+		_, found, err := ss.Load(time.Now())
+		require.NoError(t, err)
+		assert.False(t, found, "expired session should be removed")
 
-func TestManualSessionNotYetExpired(t *testing.T) {
-	t.Parallel()
-	ss := newTestSessionStore(t)
+		// 期限切れセッションは Load 時に削除される
+		_, found, err = ss.Load(time.Now())
+		require.NoError(t, err)
+		assert.False(t, found)
+	})
 
-	sess := testManualSession()
-	sess.CreatedAt = time.Now().Add(-ManualSessionTTL + time.Minute)
-	_, err := ss.Save(sess)
-	require.NoError(t, err)
+	t.Run("not yet expired", func(t *testing.T) {
+		t.Parallel()
+		ss := newTestSessionStore(t)
 
-	_, found, err := ss.Load(time.Now())
-	require.NoError(t, err)
-	assert.True(t, found)
-}
+		sess := testManualSession()
+		sess.CreatedAt = time.Now().Add(-ManualSessionTTL + time.Minute)
+		_, err := ss.Save(sess)
+		require.NoError(t, err)
 
-func TestManualSessionBrokenFile(t *testing.T) {
-	t.Parallel()
-	ss := newTestSessionStore(t)
-	path, err := ss.Save(testManualSession())
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte("{broken"), sessionFilePerm))
+		_, found, err := ss.Load(time.Now())
+		require.NoError(t, err)
+		assert.True(t, found)
+	})
 
-	_, _, err = ss.Load(time.Now())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "run 'traq auth login --manual' again")
+	t.Run("broken file", func(t *testing.T) {
+		t.Parallel()
+		ss := newTestSessionStore(t)
+		path, err := ss.Save(testManualSession())
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(path, []byte("{broken"), sessionFilePerm))
 
-	_, found, lerr := ss.Load(time.Now())
-	require.NoError(t, lerr)
-	assert.False(t, found, "broken session should be removed")
-}
+		_, _, err = ss.Load(time.Now())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "run 'traq auth login --manual' again")
 
-func TestManualSessionRejectsIncomplete(t *testing.T) {
-	t.Parallel()
-	ss := newTestSessionStore(t)
+		_, found, lerr := ss.Load(time.Now())
+		require.NoError(t, lerr)
+		assert.False(t, found, "broken session should be removed")
+	})
 
-	noVerifier := testManualSession()
-	noVerifier.Verifier = ""
-	_, err := ss.Save(noVerifier)
-	require.Error(t, err)
+	t.Run("rejects incomplete", func(t *testing.T) {
+		t.Parallel()
+		ss := newTestSessionStore(t)
 
-	noState := testManualSession()
-	noState.State = ""
-	_, err = ss.Save(noState)
-	require.Error(t, err)
-}
+		noVerifier := testManualSession()
+		noVerifier.Verifier = ""
+		_, err := ss.Save(noVerifier)
+		require.Error(t, err)
 
-func TestManualSessionFilePerm(t *testing.T) {
-	t.Parallel()
-	ss := newTestSessionStore(t)
+		noState := testManualSession()
+		noState.State = ""
+		_, err = ss.Save(noState)
+		require.Error(t, err)
+	})
 
-	path, err := ss.Save(testManualSession())
-	require.NoError(t, err)
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(sessionFilePerm), info.Mode().Perm())
+	t.Run("file perm", func(t *testing.T) {
+		t.Parallel()
+		ss := newTestSessionStore(t)
+
+		path, err := ss.Save(testManualSession())
+		require.NoError(t, err)
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(sessionFilePerm), info.Mode().Perm())
+	})
 }

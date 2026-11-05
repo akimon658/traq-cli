@@ -8,7 +8,11 @@ import (
 	"github.com/akimon658/traq-cli/internal/ui/view"
 )
 
-func newUserCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newUserCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	userCmd := &cobra.Command{
 		Use:     "user",
 		Aliases: []string{"users"},
@@ -26,7 +30,7 @@ func newUserCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			api, err := resolveClient(cmd, e)
+			api, err := resolve(cmd, e)
 			if err != nil {
 				return err
 			}

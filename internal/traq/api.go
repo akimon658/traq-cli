@@ -14,7 +14,7 @@ import (
 )
 
 // TokenContext は ctx に Bearer トークンを埋め込む。go-traq が Authorization ヘッダを付ける。
-// 直接使うのは traq パッケージ内部とテストに限ること。通常は Client メソッドを使う。
+// 直接使うのは traq パッケージ内部とテストに限ること。通常は ClientImpl メソッドを使う。
 func TokenContext(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, traq.ContextAccessToken, token)
 }
@@ -78,7 +78,7 @@ type SearchQuery struct {
 }
 
 // 以下は生の API 呼び出しで、ctx には TokenContext でトークンが埋め込まれている前提。
-// トークン解決・スコープ検査・リトライは Client が行うため、直接呼ばないこと。
+// トークン解決・スコープ検査・リトライは ClientImpl が行うため、直接呼ばないこと。
 
 func (s *Service) rawGetMe(
 	ctx context.Context,

@@ -90,8 +90,3 @@ foundation/config (Env 解決) → traq (トークン解決・認証済みクラ
 
 - `ui/view` の関数は `WriteXxx(w io.Writer, ...)` の形に統一する
 - `ui/view` は整形だけを行う。チャンネルパス解決は `traq` が、メッセージ埋め込み解決は `foundation/text` が担当する
-
-## テスト方針
-
-- ロジックのテストはドメイン・`ui/view`・`foundation/text` の単体テストに置き、`ui/cli` のテストは配線・終了コード・実サーバーとの往復に限定する
-- 実行手順は `development.md` に従う

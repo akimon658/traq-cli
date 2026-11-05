@@ -9,17 +9,25 @@ import (
 	"github.com/akimon658/traq-cli/internal/ui/view"
 )
 
-func newFileCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newFileCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	fileCmd := &cobra.Command{
 		Use:     "file",
 		Aliases: []string{"files"},
 		Short:   "ファイル操作サブコマンド",
 	}
-	fileCmd.AddCommand(newFileDownloadCmd(newEnv, flags))
+	fileCmd.AddCommand(newFileDownloadCmd(newEnv, resolve, flags))
 	return fileCmd
 }
 
-func newFileDownloadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newFileDownloadCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	var (
 		out   string
 		force bool
@@ -44,7 +52,7 @@ func newFileDownloadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Co
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			api, err := resolveClient(cmd, e)
+			api, err := resolve(cmd, e)
 			if err != nil {
 				return err
 			}

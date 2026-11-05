@@ -12,7 +12,7 @@ import (
 )
 
 // ResolveChannelID はチャンネル指定 (UUID または "#general/a/b" 形式のパス) を ID に解決する。
-func (c *Client) ResolveChannelID(ctx context.Context, target string) (string, error) {
+func (c *ClientImpl) ResolveChannelID(ctx context.Context, target string) (string, error) {
 	if _, err := uuid.Parse(target); err == nil {
 		return target, nil
 	}
@@ -34,7 +34,7 @@ func (c *Client) ResolveChannelID(ctx context.Context, target string) (string, e
 // GetChannelLabel はチャンネルIDから表示用ラベルを返す。
 // 公開チャンネルは "#a/b"、DM は "@name"。
 // 取得失敗・未解決のときは channelID をそのまま返す (UUID フォールバック)。
-func (c *Client) GetChannelLabel(ctx context.Context, channelID string) string {
+func (c *ClientImpl) GetChannelLabel(ctx context.Context, channelID string) string {
 	list, err := c.GetChannels(ctx, true)
 	if err != nil || list == nil {
 		return channelID
@@ -55,7 +55,7 @@ func (c *Client) GetChannelLabel(ctx context.Context, channelID string) string {
 }
 
 // GetUserNameMap はユーザーIDから名前へのマップを返す。
-func (c *Client) GetUserNameMap(ctx context.Context) (map[string]string, error) {
+func (c *ClientImpl) GetUserNameMap(ctx context.Context) (map[string]string, error) {
 	users, err := c.GetUsers(ctx)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (c *Client) GetUserNameMap(ctx context.Context) (map[string]string, error) 
 }
 
 // GetStampNameMap はスタンプIDから名前へのマップを返す。
-func (c *Client) GetStampNameMap(ctx context.Context) (map[string]string, error) {
+func (c *ClientImpl) GetStampNameMap(ctx context.Context) (map[string]string, error) {
 	stamps, err := c.GetStamps(ctx)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (c *Client) GetStampNameMap(ctx context.Context) (map[string]string, error)
 }
 
 // GetSelfIDAndGroups は自分宛メンション判定用の自IDと所属グループを返す。
-func (c *Client) GetSelfIDAndGroups(ctx context.Context) (string, map[string]struct{}, error) {
+func (c *ClientImpl) GetSelfIDAndGroups(ctx context.Context) (string, map[string]struct{}, error) {
 	me, err := c.GetMe(ctx)
 	if err != nil || me == nil {
 		return "", map[string]struct{}{}, err
@@ -94,7 +94,7 @@ func (c *Client) GetSelfIDAndGroups(ctx context.Context) (string, map[string]str
 }
 
 // ResolveUserIDs は UUID または @name/name を UUID に変換する。
-func (c *Client) ResolveUserIDs(ctx context.Context, inputs []string) ([]string, error) {
+func (c *ClientImpl) ResolveUserIDs(ctx context.Context, inputs []string) ([]string, error) {
 	users, err := c.GetUsers(ctx)
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func (c *Client) ResolveUserIDs(ctx context.Context, inputs []string) ([]string,
 }
 
 // GetDMUserMap は DM チャンネルIDから相手ユーザーIDへのマップを返す。
-func (c *Client) GetDMUserMap(ctx context.Context) (map[string]string, error) {
+func (c *ClientImpl) GetDMUserMap(ctx context.Context) (map[string]string, error) {
 	list, err := c.GetChannels(ctx, true)
 	if err != nil {
 		return nil, err
@@ -136,7 +136,7 @@ func (c *Client) GetDMUserMap(ctx context.Context) (map[string]string, error) {
 }
 
 // GetChannelPathMap は公開チャンネル ID からフルパス ("#a/b" 形式) へのマップを返す。
-func (c *Client) GetChannelPathMap(ctx context.Context) (map[string]string, error) {
+func (c *ClientImpl) GetChannelPathMap(ctx context.Context) (map[string]string, error) {
 	list, err := c.GetChannels(ctx, true)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (c *Client) GetChannelPathMap(ctx context.Context) (map[string]string, erro
 }
 
 // GetSubscriptionLevels はチャンネルIDから購読レベルへのマップを返す。
-func (c *Client) GetSubscriptionLevels(
+func (c *ClientImpl) GetSubscriptionLevels(
 	ctx context.Context,
 ) (map[string]traq.ChannelSubscribeLevel, error) {
 	subs, err := c.GetMyChannelSubscriptions(ctx)
@@ -160,7 +160,7 @@ func (c *Client) GetSubscriptionLevels(
 }
 
 // GetStarSet はお気に入りチャンネルIDの集合を返す。
-func (c *Client) GetStarSet(ctx context.Context) (map[string]bool, error) {
+func (c *ClientImpl) GetStarSet(ctx context.Context) (map[string]bool, error) {
 	ids, err := c.GetMyStars(ctx)
 	if err != nil {
 		return nil, err
