@@ -7,10 +7,13 @@ import (
 	"github.com/akimon658/traq-cli/internal/traq"
 )
 
-// resolveClient は Env から traQ サービスを作り、トークンを解決して
+// resolveFunc は認証済みクライアントの解決子。各コマンド実行時に呼ばれ、
+// テストは newRootCmd にスタブを注入できる (パッケージ変数を持たないため t.Parallel 可)。
+type resolveFunc func(cmd *cobra.Command, e *config.Env) (traq.Client, error)
+
+// defaultResolveClient は Env から traQ サービスを作り、トークンを解決して
 // 認証済みクライアントを返す。ドメインサービスはこの1個だけ受け取る。
-// テストで差し替えできるよう変数にしている。
-var resolveClient = func(cmd *cobra.Command, e *config.Env) (traq.Client, error) {
+func defaultResolveClient(cmd *cobra.Command, e *config.Env) (traq.Client, error) {
 	svc := traq.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
 	rt, err := svc.ResolveToken(cmd.Context(), e.TokenOverride, e.AccessToken)
 	if err != nil {

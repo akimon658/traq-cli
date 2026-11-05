@@ -35,7 +35,11 @@ func (f *globalFlags) apply(cmd *cobra.Command, e *config.Env) {
 
 // newRootCmd はコマンドツリーを新しく構築して返す。newEnv は各コマンド実行時に
 // 呼ばれ、テストから Env を注入できるようにするためのもの。
-func newRootCmd(newEnv func() *config.Env) *cobra.Command {
+// resolve が nil のときは defaultResolveClient を使い、テストはスタブを注入できる。
+func newRootCmd(newEnv func() *config.Env, resolve resolveFunc) *cobra.Command {
+	if resolve == nil {
+		resolve = defaultResolveClient
+	}
 	flags := &globalFlags{}
 	rootCmd := &cobra.Command{
 		Use:   "traq",
@@ -57,17 +61,17 @@ func newRootCmd(newEnv func() *config.Env) *cobra.Command {
 	})
 	rootCmd.AddCommand(
 		newAuthCmd(newEnv, flags),
-		newUserCmd(newEnv, flags),
-		newChannelCmd(newEnv, flags),
-		newMessageCmd(newEnv, flags),
-		newFileCmd(newEnv, flags),
+		newUserCmd(newEnv, resolve, flags),
+		newChannelCmd(newEnv, resolve, flags),
+		newMessageCmd(newEnv, resolve, flags),
+		newFileCmd(newEnv, resolve, flags),
 	)
 	return rootCmd
 }
 
 // Execute は CLI を実行し、終了コードを返す。
 func Execute() int {
-	err := newRootCmd(config.NewEnv).Execute()
+	err := newRootCmd(config.NewEnv, nil).Execute()
 	if err == nil {
 		return 0
 	}

@@ -22,7 +22,7 @@ func TestCommandAliases(t *testing.T) {
 		alias, want := alias, want
 		t.Run(alias, func(t *testing.T) {
 			t.Parallel()
-			cmd, _, err := newRootCmd(config.NewEnv).Find([]string{alias})
+			cmd, _, err := newRootCmd(config.NewEnv, nil).Find([]string{alias})
 			require.NoError(t, err)
 			assert.Equal(t, want, cmd.Name())
 		})

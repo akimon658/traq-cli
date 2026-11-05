@@ -17,7 +17,11 @@ const (
 	defaultListLimit = 10
 )
 
-func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newMessageCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	messageCmd := &cobra.Command{
 		Use:     "message",
 		Aliases: []string{"messages"},
@@ -37,7 +41,7 @@ func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			api, err := resolveClient(cmd, e)
+			api, err := resolve(cmd, e)
 			if err != nil {
 				return err
 			}
@@ -64,14 +68,18 @@ func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command
 	}
 	messageCmd.AddCommand(
 		sendMessageCmd,
-		newMessageGetCmd(newEnv, flags),
-		newMessageListCmd(newEnv, flags),
-		newMessageSearchCmd(newEnv, flags),
+		newMessageGetCmd(newEnv, resolve, flags),
+		newMessageListCmd(newEnv, resolve, flags),
+		newMessageSearchCmd(newEnv, resolve, flags),
 	)
 	return messageCmd
 }
 
-func newMessageGetCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newMessageGetCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	getCmd := &cobra.Command{
 		Use:   "get <message-id>",
 		Short: "メッセージを1件取得する",
@@ -88,7 +96,7 @@ func newMessageGetCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Comm
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := newEnv()
 			flags.apply(cmd, e)
-			api, err := resolveClient(cmd, e)
+			api, err := resolve(cmd, e)
 			if err != nil {
 				return err
 			}
@@ -115,7 +123,11 @@ func newMessageGetCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Comm
 	return getCmd
 }
 
-func newMessageListCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+func newMessageListCmd(
+	newEnv func() *config.Env,
+	resolve resolveFunc,
+	flags *globalFlags,
+) *cobra.Command {
 	var (
 		limit      int
 		offset     int
@@ -164,7 +176,7 @@ bot トークンでは未読が生成されないため、常に未読0件にな
 			if err := message.ValidateListOptions(opts); err != nil {
 				return err
 			}
-			api, err := resolveClient(cmd, e)
+			api, err := resolve(cmd, e)
 			if err != nil {
 				return err
 			}
