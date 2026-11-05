@@ -2,10 +2,8 @@ package message
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
-	"uuid"
 
 	"github.com/moznion/go-optional"
 	gotraq "github.com/traPtitech/go-traq"
@@ -39,18 +37,6 @@ func (s *Service) Search(
 		return SearchResult{}, err
 	}
 
-	// ユーザー一覧は名前解決と表示の両方に使うため先に取得する。
-	users, err := s.fetchUserList(ctx)
-	if err != nil {
-		return SearchResult{}, err
-	}
-	userByID := make(map[string]gotraq.User, len(users))
-	nameToID := make(map[string]string, len(users))
-	for _, u := range users {
-		userByID[u.Id] = u
-		nameToID[u.Name] = u.Id
-	}
-
 	q := traq.SearchQuery{
 		After:          after,
 		Before:         before,
@@ -68,21 +54,21 @@ func (s *Service) Search(
 		q.Word = optional.Some(word)
 	}
 	if opts.In != "" {
-		channelID, err := s.channel.ResolveChannel(ctx, opts.In)
+		channelID, err := s.api.ResolveChannelID(ctx, opts.In)
 		if err != nil {
 			return SearchResult{}, err
 		}
 		q.In = optional.Some(channelID)
 	}
 	if from := CleanUserInputs(opts.From); len(from) > 0 {
-		ids, err := ResolveUserIDs(from, nameToID)
+		ids, err := s.api.ResolveUserIDs(ctx, from)
 		if err != nil {
 			return SearchResult{}, exit.Usagef("invalid --from: %v", err)
 		}
 		q.From = optional.Some(ids)
 	}
 	if to := CleanUserInputs(opts.To); len(to) > 0 {
-		ids, err := ResolveUserIDs(to, nameToID)
+		ids, err := s.api.ResolveUserIDs(ctx, to)
 		if err != nil {
 			return SearchResult{}, exit.Usagef("invalid --to: %v", err)
 		}
@@ -98,20 +84,15 @@ func (s *Service) Search(
 	}
 
 	enrich := Enrichment{
-		Users: userByID, Stamps: map[string]string{},
+		Users: map[string]gotraq.User{}, Stamps: map[string]string{},
 		Quoted: map[string]gotraq.Message{}, Files: map[string]gotraq.FileInfo{},
 		MyGroups: map[string]struct{}{},
 	}
-	enrich.SelfID, enrich.MyGroups = s.fetchSelfBestEffort(ctx)
 	if len(result.Hits) > 0 {
-		stamps, err := s.fetchStampMap(ctx)
+		enrich, err = s.GetEnrichment(ctx, contentsOf(result.Hits))
 		if err != nil {
 			return SearchResult{}, err
 		}
-		enrich.Stamps = stamps
-		enrich.Quoted, enrich.Files = s.fetchQuotesAndFiles(
-			ctx, contentsOf(result.Hits),
-		)
 	}
 
 	return SearchResult{
@@ -137,25 +118,4 @@ func CleanUserInputs(inputs []string) []string {
 		}
 	}
 	return out
-}
-
-// ResolveUserIDs は UUID または @name/name を UUID に変換する。
-func ResolveUserIDs(inputs []string, nameToID map[string]string) ([]string, error) {
-	ids := make([]string, 0, len(inputs))
-	for _, in := range inputs {
-		if _, err := uuid.Parse(in); err == nil {
-			ids = append(ids, in)
-			continue
-		}
-		name := strings.TrimPrefix(in, "@")
-		if name == "" {
-			return nil, fmt.Errorf("empty user name")
-		}
-		id, ok := nameToID[name]
-		if !ok {
-			return nil, fmt.Errorf("user not found: %s", in)
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
 }

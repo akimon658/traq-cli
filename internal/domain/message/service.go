@@ -1,7 +1,6 @@
 package message
 
 import (
-	"github.com/akimon658/traq-cli/internal/domain/channel"
 	"github.com/akimon658/traq-cli/internal/traq"
 )
 
@@ -10,15 +9,13 @@ import (
 // Origin は traq.Client を正典とし、Service 内で重ねて保持しない。
 // 詳細な責務分界は docs/architecture.md を参照すること。
 type Service struct {
-	api     *traq.Client
-	channel *channel.Service
+	api *traq.Client
 }
 
 // NewService はメッセージサービスを作る。
 func NewService(api *traq.Client) *Service {
 	return &Service{
-		api:     api,
-		channel: channel.NewService(api),
+		api: api,
 	}
 }
 

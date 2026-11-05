@@ -8,9 +8,9 @@ import (
 	"github.com/akimon658/traq-cli/internal/foundation/text"
 )
 
-// FetchEnrichment はユーザー・スタンプ・引用・添付を取得する。
+// GetEnrichment はユーザー・スタンプ・引用・添付を取得する。
 // ユーザー・スタンプの取得失敗はエラーにし、引用・添付の失敗は無視して続行する。
-func (s *Service) FetchEnrichment(
+func (s *Service) GetEnrichment(
 	ctx context.Context,
 	contents []string,
 ) (Enrichment, error) {
@@ -21,8 +21,10 @@ func (s *Service) FetchEnrichment(
 		Files:    map[string]gotraq.FileInfo{},
 		MyGroups: map[string]struct{}{},
 	}
-	out.SelfID, out.MyGroups = s.fetchSelfBestEffort(ctx)
-	users, err := s.fetchUserList(ctx)
+	selfID, groups, _ := s.api.GetSelfIDAndGroups(ctx)
+	out.SelfID = selfID
+	out.MyGroups = groups
+	users, err := s.api.GetUsers(ctx)
 	if err != nil {
 		return Enrichment{}, err
 	}
@@ -30,40 +32,18 @@ func (s *Service) FetchEnrichment(
 		out.Users[u.Id] = u
 	}
 
-	stamps, err := s.fetchStampMap(ctx)
+	stamps, err := s.api.GetStampNameMap(ctx)
 	if err != nil {
 		return Enrichment{}, err
 	}
 	out.Stamps = stamps
 
-	out.Quoted, out.Files = s.fetchQuotesAndFiles(ctx, contents)
+	out.Quoted, out.Files = s.getQuotesAndFiles(ctx, contents)
 	return out, nil
 }
 
-// fetchUserList はユーザー一覧を取得する。
-func (s *Service) fetchUserList(
-	ctx context.Context,
-) ([]gotraq.User, error) {
-	return s.api.GetUsers(ctx)
-}
-
-// fetchStampMap はスタンプ一覧を取得し、ID->名前のマップで返す。
-func (s *Service) fetchStampMap(
-	ctx context.Context,
-) (map[string]string, error) {
-	stamps, err := s.api.GetStamps(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]string, len(stamps))
-	for _, stamp := range stamps {
-		out[stamp.Id] = stamp.Name
-	}
-	return out, nil
-}
-
-// fetchQuotesAndFiles は引用・添付を取得する。取得失敗は無視して続行する。
-func (s *Service) fetchQuotesAndFiles(
+// getQuotesAndFiles は引用・添付を取得する。取得失敗は無視して続行する。
+func (s *Service) getQuotesAndFiles(
 	ctx context.Context,
 	contents []string,
 ) (map[string]gotraq.Message, map[string]gotraq.FileInfo) {
@@ -90,21 +70,4 @@ func contentsOf(msgs []gotraq.Message) []string {
 		out = append(out, m.Content)
 	}
 	return out
-}
-
-// fetchSelfBestEffort は自分宛メンション判定用の自IDと所属グループを取得する。
-// 表示の補助情報なので、取得に失敗しても空のまま続行する。
-// user.Service を使わず同一の認証済みクライアントで取得する。責務分界は docs/architecture.md を参照すること。
-func (s *Service) fetchSelfBestEffort(
-	ctx context.Context,
-) (string, map[string]struct{}) {
-	me, err := s.api.GetMe(ctx)
-	if err != nil || me == nil {
-		return "", map[string]struct{}{}
-	}
-	groups := make(map[string]struct{}, len(me.Groups))
-	for _, g := range me.Groups {
-		groups[g] = struct{}{}
-	}
-	return me.Id, groups
 }

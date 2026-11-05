@@ -10,7 +10,7 @@ func (s *Service) Send(
 	ctx context.Context,
 	target, content string,
 ) (SendResult, error) {
-	channelID, err := s.channel.ResolveChannel(ctx, target)
+	channelID, err := s.api.ResolveChannelID(ctx, target)
 	if err != nil {
 		return SendResult{}, err
 	}
@@ -18,7 +18,7 @@ func (s *Service) Send(
 	if err != nil {
 		return SendResult{}, err
 	}
-	enrich, err := s.FetchEnrichment(ctx, []string{msg.Content})
+	enrich, err := s.GetEnrichment(ctx, []string{msg.Content})
 	if err != nil {
 		return SendResult{}, err
 	}

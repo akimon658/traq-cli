@@ -39,7 +39,7 @@ func newChannelUnreadCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.C
 				return err
 			}
 			groups, err := channel.NewService(api).
-				FetchUnreadGroups(cmd.Context())
+				GetUnreadGroups(cmd.Context())
 			if err != nil {
 				return err
 			}

@@ -1,18 +1,22 @@
-package channel
+package traq
 
 import (
 	"fmt"
 	"strings"
 	"uuid"
 
-	"github.com/traPtitech/go-traq"
-
-	"github.com/akimon658/traq-cli/internal/domain/user"
+	gotraq "github.com/traPtitech/go-traq"
 )
 
+// FormatUserFallback はユーザーIDが解決できなかったときの表示を返す。
+// 実在しうる "@name" 形式と衝突しない形式にする。正典はこの関数である。
+func FormatUserFallback(id string) string {
+	return fmt.Sprintf("(ユーザー解決失敗 id:%s)", id)
+}
+
 // fullPathMap は公開チャンネル ID から素パス ("a/b" 形式、# なし) へのマップを作る。
-func fullPathMap(list *traq.ChannelList) map[string]string {
-	byID := make(map[string]traq.Channel, len(list.Public))
+func fullPathMap(list *gotraq.ChannelList) map[string]string {
+	byID := make(map[string]gotraq.Channel, len(list.Public))
 	parent := make(map[string]string, len(list.Public))
 	for _, ch := range list.Public {
 		byID[ch.Id] = ch
@@ -47,7 +51,7 @@ func fullPathMap(list *traq.ChannelList) map[string]string {
 }
 
 // BuildPathMap は公開チャンネル ID からフルパス ("#a/b" 形式) へのマップを作る。
-func BuildPathMap(list *traq.ChannelList) map[string]string {
+func BuildPathMap(list *gotraq.ChannelList) map[string]string {
 	full := fullPathMap(list)
 	out := make(map[string]string, len(full))
 	for id, p := range full {
@@ -57,7 +61,7 @@ func BuildPathMap(list *traq.ChannelList) map[string]string {
 }
 
 // FindByPath は素パス ("a/b" 形式、# の有無は問わない) からチャンネル ID を探す。
-func FindByPath(list *traq.ChannelList, path string) (string, error) {
+func FindByPath(list *gotraq.ChannelList, path string) (string, error) {
 	path = strings.TrimPrefix(path, "#")
 	for id, p := range fullPathMap(list) {
 		if p == path {
@@ -67,11 +71,11 @@ func FindByPath(list *traq.ChannelList, path string) (string, error) {
 	return "", fmt.Errorf("channel not found: %s", path)
 }
 
-// LabelForChannel はチャンネルIDから表示用ラベルを返す。
-// 公開チャンネルは "#a/b"、DM は "@name" (ユーザー不明時は FallbackLabel)。
+// FormatChannelLabel はチャンネルIDから表示用ラベルを返す。
+// 公開チャンネルは "#a/b"、DM は "@name" (ユーザー不明時は FormatUserFallback)。
 // どちらにも解決できないときは channelID をそのまま返す (UUID フォールバック)。
-func LabelForChannel(
-	list *traq.ChannelList,
+func FormatChannelLabel(
+	list *gotraq.ChannelList,
 	userNames map[string]string,
 	channelID string,
 ) string {
@@ -86,7 +90,7 @@ func LabelForChannel(
 			if name, ok := userNames[dm.UserId]; ok {
 				return "@" + name
 			}
-			return user.FallbackLabel(dm.UserId)
+			return FormatUserFallback(dm.UserId)
 		}
 	}
 	return channelID

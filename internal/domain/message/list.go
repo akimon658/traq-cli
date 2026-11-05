@@ -8,7 +8,6 @@ import (
 	"github.com/moznion/go-optional"
 	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/domain/channel"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/traq"
 )
@@ -31,7 +30,7 @@ func (s *Service) List(
 		return ListResult{}, err
 	}
 
-	channelID, err := s.channel.ResolveChannel(ctx, target)
+	channelID, err := s.api.ResolveChannelID(ctx, target)
 	if err != nil {
 		return ListResult{}, err
 	}
@@ -92,7 +91,7 @@ func (s *Service) List(
 		MyGroups: map[string]struct{}{},
 	}
 	if len(msgs) > 0 {
-		enrich, err = s.FetchEnrichment(ctx, contentsOf(msgs))
+		enrich, err = s.GetEnrichment(ctx, contentsOf(msgs))
 		if err != nil {
 			return ListResult{}, err
 		}
@@ -112,7 +111,7 @@ func (s *Service) List(
 	}
 
 	return ListResult{
-		Label:      channel.DisplayLabel(target),
+		Label:      traq.DisplayLabel(target),
 		Limit:      opts.Limit,
 		Offset:     opts.Offset,
 		Order:      opts.Order,
@@ -146,7 +145,7 @@ func SearchLabel(word, in string) string {
 		label += fmt.Sprintf(" %q", word)
 	}
 	if in != "" {
-		label += fmt.Sprintf(" in %s", channel.DisplayLabel(in))
+		label += fmt.Sprintf(" in %s", traq.DisplayLabel(in))
 	}
 	return label
 }

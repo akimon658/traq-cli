@@ -9,13 +9,14 @@ import (
 // Service は traQ への接続に必要な常駐依存を束ねる。
 // Origin/ClientID/Store/Sessions は実行環境由来の長寿命設定、
 // api は Origin から作られる go-traq クライアントである。
-// 要求ごとに変わる値 (コンテキスト・トークン・コード等) はメソッド引数に残す。
+// caches は同一プロセス内の重複 API 呼び出しを抑える対象別 LRU である。
 type Service struct {
 	origin   string
 	clientID string
 	store    Store
 	sessions auth.SessionStore
 	api      *traq.APIClient
+	caches   *clientCaches
 }
 
 // NewService は traQ サービスを作る。
@@ -29,6 +30,7 @@ func NewService(origin, clientID string, store Store, sessions auth.SessionStore
 		store:    store,
 		sessions: sessions,
 		api:      traq.NewAPIClient(cfg),
+		caches:   newClientCaches(),
 	}
 }
 

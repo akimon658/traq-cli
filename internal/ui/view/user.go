@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/traPtitech/go-traq"
+	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/domain/user"
+	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // WriteMyUserDetail は自分のユーザー詳細を可読性の高いテキストで出力する。
-func WriteMyUserDetail(w io.Writer, me *traq.MyUserDetail, loc *time.Location) error {
+func WriteMyUserDetail(w io.Writer, me *gotraq.MyUserDetail, loc *time.Location) error {
 	if loc == nil {
 		loc = time.Local
 	}
@@ -65,7 +65,7 @@ func WriteMyUserDetail(w io.Writer, me *traq.MyUserDetail, loc *time.Location) e
 }
 
 // MyUserLabel は MyUserDetail 用の "@name (DisplayName)" ラベルを組み立てる。
-func MyUserLabel(me *traq.MyUserDetail) string {
+func MyUserLabel(me *gotraq.MyUserDetail) string {
 	label := "@" + me.Name
 	if me.DisplayName != "" && me.DisplayName != me.Name {
 		label += " (" + me.DisplayName + ")"
@@ -74,7 +74,7 @@ func MyUserLabel(me *traq.MyUserDetail) string {
 }
 
 // UserLabel は User 用の "@name (DisplayName)" ラベルを組み立てる。
-func UserLabel(u traq.User) string {
+func UserLabel(u gotraq.User) string {
 	label := "@" + u.Name
 	if u.DisplayName != "" && u.DisplayName != u.Name {
 		label += " (" + u.DisplayName + ")"
@@ -85,7 +85,7 @@ func UserLabel(u traq.User) string {
 // UserDisplay はユーザーIDから表示用ラベルを返す。
 // ユーザーが解決できない場合 (停止済みユーザーが一覧に無い等) は
 // 実在しうる "@name" 形式と衝突しない取得失敗表示にフォールバックする。
-func UserDisplay(id string, users map[string]traq.User) string {
+func UserDisplay(id string, users map[string]gotraq.User) string {
 	if u, ok := users[id]; ok {
 		return UserLabel(u)
 	}
@@ -93,19 +93,19 @@ func UserDisplay(id string, users map[string]traq.User) string {
 }
 
 // UserFallbackLabel はユーザーIDが解決できなかったときの表示を返す。
-// 形式の正規の定義は domain/user.FallbackLabel。
+// 形式の正規の定義は traq.FormatUserFallback。
 func UserFallbackLabel(id string) string {
-	return user.FallbackLabel(id)
+	return traq.FormatUserFallback(id)
 }
 
 // UserStateLabel はアカウント状態を可読名で返す。
-func UserStateLabel(state traq.UserAccountState) string {
+func UserStateLabel(state gotraq.UserAccountState) string {
 	switch state {
-	case traq.USERACCOUNTSTATE_active:
+	case gotraq.USERACCOUNTSTATE_active:
 		return "active"
-	case traq.USERACCOUNTSTATE_deactivated:
+	case gotraq.USERACCOUNTSTATE_deactivated:
 		return "deactivated"
-	case traq.USERACCOUNTSTATE_suspended:
+	case gotraq.USERACCOUNTSTATE_suspended:
 		return "suspended"
 	default:
 		return fmt.Sprintf("%d", int32(state))
