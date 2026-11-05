@@ -2,10 +2,17 @@ version: "2"
 
 linters:
   enable:
+    - depguard
     - mnd
     - revive
     - usetesting
   settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/google/uuid
+              desc: Use uuid package in std, which is available since Go 1.27
     revive:
       rules:
         - name: argument-limit
