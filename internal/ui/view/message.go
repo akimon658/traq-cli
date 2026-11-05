@@ -208,15 +208,15 @@ func WriteSingleMessage(w io.Writer, params SingleViewParams) error {
 	return err
 }
 
-// WriteChannelLabel はチャンネルのラベル行だけを出力する。
-func WriteChannelLabel(w io.Writer, label string) error {
+// writeChannelLabel はチャンネルのラベル行だけを出力する。
+func writeChannelLabel(w io.Writer, label string) error {
 	_, err := fmt.Fprintln(w, label)
 	return err
 }
 
 // WriteGetMessage はチャンネルラベル行の後にメッセージ1件を出力する。
 func WriteGetMessage(w io.Writer, params GetViewParams) error {
-	if err := WriteChannelLabel(w, params.Label); err != nil {
+	if err := writeChannelLabel(w, params.Label); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(w); err != nil {

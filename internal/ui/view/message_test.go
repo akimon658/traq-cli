@@ -534,7 +534,7 @@ func TestFormatQuoteSelfMentionDoesNotLightHeader(t *testing.T) {
 func TestWriteChannelLabel(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	require.NoError(t, WriteChannelLabel(&buf, "#general"))
+	require.NoError(t, writeChannelLabel(&buf, "#general"))
 	assert.Equal(t, "#general\n", buf.String())
 }
 
