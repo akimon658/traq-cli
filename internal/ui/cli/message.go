@@ -59,15 +59,60 @@ func newMessageCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command
 					SelfID:   res.SelfID,
 					MyGroups: res.MyGroups,
 				},
-			}.Build())
+			})
 		},
 	}
 	messageCmd.AddCommand(
 		sendMessageCmd,
+		newMessageGetCmd(newEnv, flags),
 		newMessageListCmd(newEnv, flags),
 		newMessageSearchCmd(newEnv, flags),
 	)
 	return messageCmd
+}
+
+func newMessageGetCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {
+	getCmd := &cobra.Command{
+		Use:   "get <message-id>",
+		Short: "メッセージを1件取得する",
+		Long:  `<message-id> はメッセージ UUID です。`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+				return exit.UsageError(err)
+			}
+			if err := message.ValidateMessageID(args[0]); err != nil {
+				return err
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			e := newEnv()
+			flags.apply(cmd, e)
+			api, err := resolveClient(cmd, e)
+			if err != nil {
+				return err
+			}
+			res, err := message.NewService(api).Get(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			return view.WriteGetMessage(cmd.OutOrStdout(), view.GetViewParams{
+				Label: res.ChannelLabel,
+				Msg:   res.Msg,
+				CommonParams: view.CommonParams{
+					Users:    res.Users,
+					Stamps:   res.Stamps,
+					Loc:      res.Loc,
+					Origin:   res.Origin,
+					Quoted:   res.Quoted,
+					Files:    res.Files,
+					SelfID:   res.SelfID,
+					MyGroups: res.MyGroups,
+				},
+			})
+		},
+	}
+	return getCmd
 }
 
 func newMessageListCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Command {

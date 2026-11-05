@@ -29,6 +29,14 @@ func ValidateListOptions(opts ListOptions) error {
 	return nil
 }
 
+// ValidateMessageID はメッセージ ID が UUID であることを検証する。
+func ValidateMessageID(id string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return exit.Usagef("invalid message ID: %v", err)
+	}
+	return nil
+}
+
 // ValidateSearchOptions は search フラグ値を認証前に検証する。
 func ValidateSearchOptions(word string, opts SearchOptions) error {
 	_ = word

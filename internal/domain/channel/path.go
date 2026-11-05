@@ -6,6 +6,8 @@ import (
 	"uuid"
 
 	"github.com/traPtitech/go-traq"
+
+	"github.com/akimon658/traq-cli/internal/domain/user"
 )
 
 // fullPathMap は公開チャンネル ID から素パス ("a/b" 形式、# なし) へのマップを作る。
@@ -63,6 +65,31 @@ func FindByPath(list *traq.ChannelList, path string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("channel not found: %s", path)
+}
+
+// LabelForChannel はチャンネルIDから表示用ラベルを返す。
+// 公開チャンネルは "#a/b"、DM は "@name" (ユーザー不明時は FallbackLabel)。
+// どちらにも解決できないときは channelID をそのまま返す (UUID フォールバック)。
+func LabelForChannel(
+	list *traq.ChannelList,
+	userNames map[string]string,
+	channelID string,
+) string {
+	if list != nil {
+		if p, ok := BuildPathMap(list)[channelID]; ok {
+			return p
+		}
+		for _, dm := range list.Dm {
+			if dm.Id != channelID {
+				continue
+			}
+			if name, ok := userNames[dm.UserId]; ok {
+				return "@" + name
+			}
+			return user.FallbackLabel(dm.UserId)
+		}
+	}
+	return channelID
 }
 
 // DisplayLabel は表示用のチャンネル名を組み立てる。UUID 指定ならそのまま、
