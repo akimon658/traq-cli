@@ -480,6 +480,40 @@ func TestFormatStampItems(t *testing.T) {
 			want:  []string{":thank: ×3", ":ok: ×1"},
 		},
 		{
+			name: "aggregates same stamp across users",
+			stamps: []traq.MessageStamp{
+				{
+					StampId: "s1", UserId: "u1", Count: 1,
+					CreatedAt: time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC),
+				},
+				{
+					StampId: "s1", UserId: "u2", Count: 2,
+					CreatedAt: time.Date(2026, 10, 17, 10, 1, 0, 0, time.UTC),
+				},
+			},
+			names: map[string]string{"s1": "ok"},
+			want:  []string{":ok: ×3"},
+		},
+		{
+			name: "sorts by earliest createdAt",
+			stamps: []traq.MessageStamp{
+				{
+					StampId: "sW", UserId: "u1", Count: 1,
+					CreatedAt: time.Date(2026, 10, 17, 10, 1, 0, 0, time.UTC),
+				},
+				{
+					StampId: "sS", UserId: "u2", Count: 1,
+					CreatedAt: time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC),
+				},
+				{
+					StampId: "sS", UserId: "u3", Count: 1,
+					CreatedAt: time.Date(2026, 10, 17, 10, 2, 0, 0, time.UTC),
+				},
+			},
+			names: map[string]string{"sW": "w", "sS": "sayonara-nya"},
+			want:  []string{":sayonara-nya: ×2", ":w: ×1"},
+		},
+		{
 			name: "unknown stamp falls back to ID",
 			stamps: []traq.MessageStamp{
 				{StampId: "s9", Count: 2},
