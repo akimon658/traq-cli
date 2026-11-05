@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -45,12 +46,14 @@ func unitEnv() *config.Env {
 	return &config.Env{Origin: "https://q.trap.jp", ClientID: "test"}
 }
 
-// stubEnrichment は domain の Enrichment 取得の happy path をモックする。
+// stubEnrichment は view の遅延解決の happy path をモックする。
 // 出力内容は view 側で検証するため、ここでは呼び出しの成功だけを保証する。
 func stubEnrichment(mc *traq.MockClient) {
 	mc.EXPECT().GetSelfIDAndGroups(gomock.Any()).Return("", map[string]struct{}{}, nil).AnyTimes()
-	mc.EXPECT().GetUsers(gomock.Any()).Return([]gotraq.User{}, nil).AnyTimes()
-	mc.EXPECT().GetStampNameMap(gomock.Any()).Return(map[string]string{}, nil).AnyTimes()
+	mc.EXPECT().GetUserByID(gomock.Any(), gomock.Any()).
+		Return(gotraq.User{}, errors.New("not found")).AnyTimes()
+	mc.EXPECT().GetStampName(gomock.Any(), gomock.Any()).
+		Return("", errors.New("not found")).AnyTimes()
 	mc.EXPECT().Origin().Return("https://q.trap.jp").AnyTimes()
 }
 

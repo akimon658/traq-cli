@@ -13,11 +13,8 @@ import (
 	"github.com/akimon658/traq-cli/internal/traq"
 )
 
-// stubEnrichment は Enrichment 取得の happy path をモックする。
+// stubEnrichment は表示用の Origin 取得の happy path をモックする。
 func stubEnrichment(mc *traq.MockClient) {
-	mc.EXPECT().GetSelfIDAndGroups(gomock.Any()).Return("", map[string]struct{}{}, nil).AnyTimes()
-	mc.EXPECT().GetUsers(gomock.Any()).Return([]gotraq.User{}, nil).AnyTimes()
-	mc.EXPECT().GetStampNameMap(gomock.Any()).Return(map[string]string{}, nil).AnyTimes()
 	mc.EXPECT().Origin().Return("https://q.trap.jp").AnyTimes()
 }
 

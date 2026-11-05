@@ -36,6 +36,8 @@ type Client interface {
 	GetChannelLabel(ctx context.Context, channelID string) string
 	GetUserNameMap(ctx context.Context) (map[string]string, error)
 	GetStampNameMap(ctx context.Context) (map[string]string, error)
+	GetUserByID(ctx context.Context, id string) (traq.User, error)
+	GetStampName(ctx context.Context, id string) (string, error)
 	GetSelfIDAndGroups(ctx context.Context) (string, map[string]struct{}, error)
 	ResolveUserIDs(ctx context.Context, inputs []string) ([]string, error)
 	GetDMUserMap(ctx context.Context) (map[string]string, error)

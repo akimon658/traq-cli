@@ -85,18 +85,6 @@ func (s *Service) List(
 		}
 	}
 
-	enrich := Enrichment{
-		Users: map[string]gotraq.User{}, Stamps: map[string]string{},
-		Quoted: map[string]gotraq.Message{}, Files: map[string]gotraq.FileInfo{},
-		MyGroups: map[string]struct{}{},
-	}
-	if len(msgs) > 0 {
-		enrich, err = s.GetEnrichment(ctx, contentsOf(msgs))
-		if err != nil {
-			return ListResult{}, err
-		}
-	}
-
 	// --show-unread 用の未読情報。表示の補助なので取得に失敗しても本体の表示は続行する。
 	// --unread-only 時は取得済みなのでスキップする。
 	if opts.ShowUnread && !opts.UnreadOnly {
@@ -116,7 +104,6 @@ func (s *Service) List(
 		Offset:     opts.Offset,
 		Order:      opts.Order,
 		Msgs:       msgs,
-		Enrichment: enrich,
 		Loc:        time.Local,
 		Unread:     unread,
 		UnreadOnly: opts.UnreadOnly,

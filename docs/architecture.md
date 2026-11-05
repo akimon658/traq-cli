@@ -20,9 +20,9 @@ internal/traq/               traQ への唯一の出入口。Token / Store / 解
                              FormatUserFallback) も持つ
 internal/domain/channel/     未読取得・分類
 internal/domain/file/        ファイル取得 (ダウンロード) と保存
-internal/domain/message/     メッセージ取得・検索・投稿と付随情報の拡充
+internal/domain/message/     メッセージ取得・検索・投稿
 internal/ui/cli/             cobra の配線のみ
-internal/ui/view/            人間可読テキストの出力専任。API を呼ばない
+internal/ui/view/            人間可読テキストの出力。MessageRenderer が traq.Client を保持し遅延解決する
 ```
 
 依存方向は次の通り。下位は上位を知らない。
@@ -54,7 +54,7 @@ foundation/config → {traq (Store/Token 型・既定値), auth (SessionStore �
 - ドメインサービス (`domain/channel` / `domain/message` / `domain/file`) はデータを返す。表示は `view` に任せ、`view` を import しない
 - ドメインサービスは `config.Env` を保持しない。必要な値 (`*traq.Client`) はコンストラクタの明示引数で受け取る。`origin` は重ねて保持せず、`Client.Origin()` を正典とする
 - `traq.Service` はコマンド毎に `ui/cli` で1個作り (`resolveClient` 内)、`WithToken` で束縛した `*traq.Client` をドメインサービス間で共有する
-- `ui/view` は `io.Writer` への出力だけを行い、API を呼ばない。入力型は `domain` / `traq` の型を参照する
+- `ui/view` は `io.Writer` への出力と表示用の遅延解決を行う。`MessageRenderer` が `traq.Client` を保持し、ユーザー・スタンプ・引用・添付・自ユーザー解決は描画時に行い、失敗時はIDフォールバック表示に倒す。入力型は `domain` / `traq` の型を参照する
 - `traq.Client` が唯一の API 実行経路。401 時の refresh・保存・リトライは `Client` 内に集約されており、呼び出し元は通常のメソッド呼び出しと同じ形で書ける。一覧系と ID 単位の取得は対象別 LRU に保持される
 - 終了コードと `exit.Error` は `foundation/exit` が定義する。`traq` やドメインサービスはこれを返し、`ui/cli.Execute` がコードに変換する
 
@@ -62,8 +62,8 @@ foundation/config → {traq (Store/Token 型・既定値), auth (SessionStore �
 
 - `channel`: 未読取得・分類。`Origin` を必要としない。チャンネル解決・ラベル解決は `traq` に寄せる
 - `file`: ファイル取得と保存先解決。`Origin` を必要としない
-- `message`: メッセージ取得・検索・投稿と付随情報の拡充 (`Enrichment`)。`Origin` は保持せず `Client.Origin()` から取得し、埋め込み解決と結果表示に使う
-- ユーザー一覧・スタンプ一覧・自ユーザー・チャンネル一覧の取得と名前解決 (`ResolveChannelID` / `ResolveUserIDs` / `GetUserNameMap` / `GetStampNameMap` / `GetSelfIDAndGroups` / `GetChannelLabel` 等) は `traq.Client` が行う。キャッシュがあるためドメイン側で結果を引き回さない
+- `message`: メッセージ取得・検索・投稿。`Origin` は保持せず `Client.Origin()` から取得する。表示に必要な解決は `view.MessageRenderer` が `traq.Client` 経由で遅延取得する
+- ユーザー・スタンプ・自ユーザー・チャンネルの単品解決 (`GetUserByID` / `GetStampName` / `GetSelfIDAndGroups` / `ResolveChannelID` / `ResolveUserIDs` / `GetChannelLabel` 等) は `traq.Client` が行う。キャッシュがあるためドメイン側・表示間で結果を引き回さない。一覧系 (`GetUserNameMap` / `GetStampNameMap`) はチャンネルラベル解決など必要な箇所でのみ使う
 - `traq.FormatUserFallback` はユーザー解決失敗時の正規の表示形式。`channel` と `view` が共有する
 
 ## 実行フロー
@@ -88,5 +88,5 @@ foundation/config (Env 解決) → traq (トークン解決・認証済みクラ
 
 ## 表示方針
 
-- `ui/view` の関数は `WriteXxx(w io.Writer, ...)` の形に統一する
-- `ui/view` は整形だけを行う。チャンネルパス解決は `traq` が、メッセージ埋め込み解決は `foundation/text` が担当する
+- `ui/view` の出力は `MessageRenderer` メソッドの `WriteXxx(ctx, w, ...)` の形に統一する
+- `ui/view` は `traq.Client` の遅延解決と整形を行う。解決失敗はIDフォールバック表示に倒す。チャンネルパス解決は `traq` が、メッセージ埋め込み解決は `foundation/text` が担当する

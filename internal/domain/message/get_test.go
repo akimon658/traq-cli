@@ -1,7 +1,6 @@
 package message
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -52,16 +51,5 @@ func TestService_Get(t *testing.T) {
 		var ec *exit.Error
 		require.ErrorAs(t, err, &ec)
 		assert.Equal(t, exit.General, ec.Code)
-	})
-
-	t.Run("enrichment failure propagates", func(t *testing.T) {
-		t.Parallel()
-		mc := traq.NewMockClient(gomock.NewController(t))
-		mc.EXPECT().GetMessage(gomock.Any(), messageID).Return(msg, nil)
-		mc.EXPECT().GetSelfIDAndGroups(gomock.Any()).Return("", map[string]struct{}{}, nil)
-		mc.EXPECT().GetUsers(gomock.Any()).Return(nil, errors.New("users failed"))
-
-		_, err := NewService(mc).Get(t.Context(), messageID)
-		require.Error(t, err)
 	})
 }

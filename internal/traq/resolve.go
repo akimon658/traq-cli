@@ -80,6 +80,36 @@ func (c *ClientImpl) GetStampNameMap(ctx context.Context) (map[string]string, er
 	return out, nil
 }
 
+// GetUserByID はユーザーIDからユーザー情報を返す。
+// 見つからない場合・取得失敗時はエラーを返し、呼び出し側はIDフォールバック表示に倒す。
+func (c *ClientImpl) GetUserByID(ctx context.Context, id string) (traq.User, error) {
+	users, err := c.GetUsers(ctx)
+	if err != nil {
+		return traq.User{}, err
+	}
+	for _, u := range users {
+		if u.Id == id {
+			return u, nil
+		}
+	}
+	return traq.User{}, fmt.Errorf("user not found: %s", id)
+}
+
+// GetStampName はスタンプIDから名前を返す。
+// 見つからない場合・取得失敗時はエラーを返し、呼び出し側はIDフォールバック表示に倒す。
+func (c *ClientImpl) GetStampName(ctx context.Context, id string) (string, error) {
+	stamps, err := c.GetStamps(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, s := range stamps {
+		if s.Id == id {
+			return s.Name, nil
+		}
+	}
+	return "", fmt.Errorf("stamp not found: %s", id)
+}
+
 // GetSelfIDAndGroups は自分宛メンション判定用の自IDと所属グループを返す。
 func (c *ClientImpl) GetSelfIDAndGroups(ctx context.Context) (string, map[string]struct{}, error) {
 	me, err := c.GetMe(ctx)

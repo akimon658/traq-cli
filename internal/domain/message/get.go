@@ -17,14 +17,9 @@ func (s *Service) Get(
 	if err != nil {
 		return GetResult{}, err
 	}
-	enrich, err := s.GetEnrichment(ctx, []string{msg.Content})
-	if err != nil {
-		return GetResult{}, err
-	}
 	return GetResult{
 		Msg:          *msg,
 		ChannelLabel: s.api.GetChannelLabel(ctx, msg.ChannelId),
-		Enrichment:   enrich,
 		Loc:          time.Local,
 		Origin:       s.origin(),
 	}, nil

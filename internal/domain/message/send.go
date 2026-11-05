@@ -18,14 +18,9 @@ func (s *Service) Send(
 	if err != nil {
 		return SendResult{}, err
 	}
-	enrich, err := s.GetEnrichment(ctx, []string{msg.Content})
-	if err != nil {
-		return SendResult{}, err
-	}
 	return SendResult{
-		Msg:        *msg,
-		Enrichment: enrich,
-		Loc:        time.Local,
-		Origin:     s.origin(),
+		Msg:    *msg,
+		Loc:    time.Local,
+		Origin: s.origin(),
 	}, nil
 }

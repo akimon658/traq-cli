@@ -82,16 +82,6 @@ func UserLabel(u gotraq.User) string {
 	return label
 }
 
-// UserDisplay はユーザーIDから表示用ラベルを返す。
-// ユーザーが解決できない場合 (停止済みユーザーが一覧に無い等) は
-// 実在しうる "@name" 形式と衝突しない取得失敗表示にフォールバックする。
-func UserDisplay(id string, users map[string]gotraq.User) string {
-	if u, ok := users[id]; ok {
-		return UserLabel(u)
-	}
-	return UserFallbackLabel(id)
-}
-
 // UserFallbackLabel はユーザーIDが解決できなかったときの表示を返す。
 // 形式の正規の定義は traq.FormatUserFallback。
 func UserFallbackLabel(id string) string {

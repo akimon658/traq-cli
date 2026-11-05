@@ -38,27 +38,17 @@ type SearchOptions struct {
 	Sort           string
 }
 
-// Enrichment は表示に必要な付随情報。引用・添付の解決失敗分は欠番になる。
-type Enrichment struct {
-	Users  map[string]traq.User
-	Stamps map[string]string
-	Quoted map[string]traq.Message
-	Files  map[string]traq.FileInfo
-	// SelfID と MyGroups は自分宛メンション判定用。取得できなかった場合は空。
-	SelfID   string
-	MyGroups map[string]struct{}
-}
-
-// ListResult は message list の結果。
+// ListResult は message list の結果。表示に必要な解決は view が traq.Client 経由で行う。
 type ListResult struct {
 	Label  string
 	Limit  int
 	Offset int
 	Order  string
 	Msgs   []traq.Message
-	Enrichment
-	Loc        *time.Location
-	Unread     optional.Option[traq.UnreadChannel]
+	Loc    *time.Location
+	Unread optional.Option[traq.UnreadChannel]
+	// UnreadOnly が true なら未読メッセージのみを表示するモード。
+	// Unread が None のときは未読0件として出力する。
 	UnreadOnly bool
 	Origin     string
 }
@@ -71,15 +61,13 @@ type SearchResult struct {
 	Sort      string
 	TotalHits int64
 	Msgs      []traq.Message
-	Enrichment
-	Loc    *time.Location
-	Origin string
+	Loc       *time.Location
+	Origin    string
 }
 
 // SendResult は message send の結果 (投稿直後の1件)。
 type SendResult struct {
-	Msg traq.Message
-	Enrichment
+	Msg    traq.Message
 	Loc    *time.Location
 	Origin string
 }
@@ -90,7 +78,6 @@ type GetResult struct {
 	// ChannelLabel は投稿先チャンネルの表示用ラベル ("#a/b" / DM は "@name")。
 	// 解決できないときはチャンネル UUID。
 	ChannelLabel string
-	Enrichment
-	Loc    *time.Location
-	Origin string
+	Loc          *time.Location
+	Origin       string
 }

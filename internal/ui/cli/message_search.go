@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"time"
+
 	"github.com/moznion/go-optional"
 	"github.com/spf13/cobra"
 
@@ -84,24 +86,16 @@ func newMessageSearchCmd(
 			if err != nil {
 				return err
 			}
-			return view.WriteMessageList(cmd.OutOrStdout(), view.SearchViewParams{
-				Label:     res.Label,
-				Limit:     res.Limit,
-				Offset:    res.Offset,
-				Sort:      res.Sort,
-				TotalHits: res.TotalHits,
-				Msgs:      res.Msgs,
-				CommonParams: view.CommonParams{
-					Users:    res.Users,
-					Stamps:   res.Stamps,
-					Loc:      res.Loc,
-					Origin:   res.Origin,
-					Quoted:   res.Quoted,
-					Files:    res.Files,
-					SelfID:   res.SelfID,
-					MyGroups: res.MyGroups,
-				},
-			}.Build())
+			return view.NewMessageRenderer(api, time.Local).WriteMessageList(
+				cmd.Context(), cmd.OutOrStdout(), view.SearchViewParams{
+					Label:     res.Label,
+					Limit:     res.Limit,
+					Offset:    res.Offset,
+					Sort:      res.Sort,
+					TotalHits: res.TotalHits,
+					Msgs:      res.Msgs,
+				}.Build(),
+			)
 		},
 	}
 	searchCmd.Flags().StringVar(&in, "in", "", "検索対象チャンネル (UUID または #パス)")
