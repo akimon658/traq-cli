@@ -37,3 +37,15 @@ go test ./...
 - Docker が無い環境や素早く回したい場合は `go test -short ./...` で実サーバーを使うテストをスキップできる。`-short` で回るのは実サーバー不要の単体テストである。
   `foundation/text` / `ui/view` / `domain/channel` / `domain/message` / `domain/file` / `internal/auth` / `ui/cli`。実サーバーは不要である。
 - `ui/cli` で実サーバーは叩かない。配線の確認はモックで行う。
+
+## モック生成
+
+インターフェースを変更したときは、リポジトリルートで以下を実行してモックを再生成する。
+
+```sh
+go generate ./...
+```
+
+`//go:generate` の `-destination` はパッケージディレクトリからの相対パスで書かれている。
+リポジトリルートから `go tool mockgen -destination=internal/traq/mock_client.go ...` のように手動実行して destination を上書きしないこと。
+生成ヘッダーがずれて、次回の `go generate` で余計な差分が出る。
