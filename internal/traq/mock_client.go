@@ -251,6 +251,21 @@ func (mr *MockClientMockRecorder) GetSelfIDAndGroups(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfIDAndGroups", reflect.TypeOf((*MockClient)(nil).GetSelfIDAndGroups), ctx)
 }
 
+// GetStampName mocks base method.
+func (m *MockClient) GetStampName(ctx context.Context, id string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStampName", ctx, id)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStampName indicates an expected call of GetStampName.
+func (mr *MockClientMockRecorder) GetStampName(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStampName", reflect.TypeOf((*MockClient)(nil).GetStampName), ctx, id)
+}
+
 // GetStampNameMap mocks base method.
 func (m *MockClient) GetStampNameMap(ctx context.Context) (map[string]string, error) {
 	m.ctrl.T.Helper()
@@ -309,6 +324,21 @@ func (m *MockClient) GetSubscriptionLevels(ctx context.Context) (map[string]traq
 func (mr *MockClientMockRecorder) GetSubscriptionLevels(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubscriptionLevels", reflect.TypeOf((*MockClient)(nil).GetSubscriptionLevels), ctx)
+}
+
+// GetUserByID mocks base method.
+func (m *MockClient) GetUserByID(ctx context.Context, id string) (traq.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserByID", ctx, id)
+	ret0, _ := ret[0].(traq.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserByID indicates an expected call of GetUserByID.
+func (mr *MockClientMockRecorder) GetUserByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByID", reflect.TypeOf((*MockClient)(nil).GetUserByID), ctx, id)
 }
 
 // GetUserNameMap mocks base method.

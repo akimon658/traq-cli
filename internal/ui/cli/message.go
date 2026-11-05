@@ -2,6 +2,7 @@ package cli
 
 import (
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -51,19 +52,9 @@ func newMessageCmd(
 			if err != nil {
 				return err
 			}
-			return view.WriteSingleMessage(cmd.OutOrStdout(), view.SingleViewParams{
-				Msg: res.Msg,
-				CommonParams: view.CommonParams{
-					Users:    res.Users,
-					Stamps:   res.Stamps,
-					Loc:      res.Loc,
-					Origin:   res.Origin,
-					Quoted:   res.Quoted,
-					Files:    res.Files,
-					SelfID:   res.SelfID,
-					MyGroups: res.MyGroups,
-				},
-			})
+			return view.NewMessageRenderer(api, time.Local).WriteSingleMessage(
+				cmd.Context(), cmd.OutOrStdout(), view.SingleViewParams{Msg: res.Msg},
+			)
 		},
 	}
 	messageCmd.AddCommand(
@@ -104,20 +95,12 @@ func newMessageGetCmd(
 			if err != nil {
 				return err
 			}
-			return view.WriteGetMessage(cmd.OutOrStdout(), view.GetViewParams{
-				Label: res.ChannelLabel,
-				Msg:   res.Msg,
-				CommonParams: view.CommonParams{
-					Users:    res.Users,
-					Stamps:   res.Stamps,
-					Loc:      res.Loc,
-					Origin:   res.Origin,
-					Quoted:   res.Quoted,
-					Files:    res.Files,
-					SelfID:   res.SelfID,
-					MyGroups: res.MyGroups,
+			return view.NewMessageRenderer(api, time.Local).WriteGetMessage(
+				cmd.Context(), cmd.OutOrStdout(), view.GetViewParams{
+					Label: res.ChannelLabel,
+					Msg:   res.Msg,
 				},
-			})
+			)
 		},
 	}
 	return getCmd
@@ -185,25 +168,17 @@ bot トークンでは未読が生成されないため、常に未読0件にな
 			if err != nil {
 				return err
 			}
-			return view.WriteMessageList(cmd.OutOrStdout(), view.ListViewParams{
-				Label:      res.Label,
-				Limit:      res.Limit,
-				Offset:     res.Offset,
-				Order:      res.Order,
-				Msgs:       res.Msgs,
-				Unread:     res.Unread,
-				UnreadOnly: res.UnreadOnly,
-				CommonParams: view.CommonParams{
-					Users:    res.Users,
-					Stamps:   res.Stamps,
-					Loc:      res.Loc,
-					Origin:   res.Origin,
-					Quoted:   res.Quoted,
-					Files:    res.Files,
-					SelfID:   res.SelfID,
-					MyGroups: res.MyGroups,
-				},
-			}.Build())
+			return view.NewMessageRenderer(api, time.Local).WriteMessageList(
+				cmd.Context(), cmd.OutOrStdout(), view.ListViewParams{
+					Label:      res.Label,
+					Limit:      res.Limit,
+					Offset:     res.Offset,
+					Order:      res.Order,
+					Msgs:       res.Msgs,
+					Unread:     res.Unread,
+					UnreadOnly: res.UnreadOnly,
+				}.Build(),
+			)
 		},
 	}
 	listCmd.Flags().IntVar(&limit, "limit", defaultListLimit, "取得する件数")

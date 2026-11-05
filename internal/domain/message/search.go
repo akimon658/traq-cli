@@ -3,10 +3,8 @@ package message
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/moznion/go-optional"
-	gotraq "github.com/traPtitech/go-traq"
 
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 	"github.com/akimon658/traq-cli/internal/traq"
@@ -83,28 +81,13 @@ func (s *Service) Search(
 		return SearchResult{}, err
 	}
 
-	enrich := Enrichment{
-		Users: map[string]gotraq.User{}, Stamps: map[string]string{},
-		Quoted: map[string]gotraq.Message{}, Files: map[string]gotraq.FileInfo{},
-		MyGroups: map[string]struct{}{},
-	}
-	if len(result.Hits) > 0 {
-		enrich, err = s.GetEnrichment(ctx, contentsOf(result.Hits))
-		if err != nil {
-			return SearchResult{}, err
-		}
-	}
-
 	return SearchResult{
-		Label:      SearchLabel(word, opts.In),
-		Limit:      opts.Limit,
-		Offset:     opts.Offset,
-		Sort:       opts.Sort,
-		TotalHits:  result.TotalHits,
-		Msgs:       result.Hits,
-		Enrichment: enrich,
-		Loc:        time.Local,
-		Origin:     s.origin(),
+		Label:     SearchLabel(word, opts.In),
+		Limit:     opts.Limit,
+		Offset:    opts.Offset,
+		Sort:      opts.Sort,
+		TotalHits: result.TotalHits,
+		Msgs:      result.Hits,
 	}, nil
 }
 

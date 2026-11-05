@@ -29,7 +29,6 @@ func TestService_List(t *testing.T) {
 		mc := traq.NewMockClient(gomock.NewController(t))
 		mc.EXPECT().ResolveChannelID(gomock.Any(), "#general").Return("c1", nil)
 		mc.EXPECT().GetChannelMessages(gomock.Any(), "c1", gomock.Any()).Return(msgs, nil)
-		stubEnrichment(mc)
 
 		res, err := NewService(mc).List(t.Context(), "#general", validListOptions())
 		require.NoError(t, err)
@@ -74,7 +73,6 @@ func TestService_List(t *testing.T) {
 		mc := traq.NewMockClient(gomock.NewController(t))
 		mc.EXPECT().ResolveChannelID(gomock.Any(), "#general").Return("c1", nil)
 		mc.EXPECT().GetMyUnreadChannels(gomock.Any()).Return([]gotraq.UnreadChannel{}, nil)
-		mc.EXPECT().Origin().Return("https://q.trap.jp").AnyTimes()
 
 		res, err := NewService(mc).
 			List(t.Context(), "#general", ListOptions{Limit: 10, Order: "desc", UnreadOnly: true})
@@ -93,7 +91,6 @@ func TestService_List(t *testing.T) {
 			Return([]gotraq.UnreadChannel{unread}, nil)
 		// --since が未読 since より後なら新しい方が採用される。取得は1回だけ行われる
 		mc.EXPECT().GetChannelMessages(gomock.Any(), "c1", gomock.Any()).Return(msgs, nil)
-		stubEnrichment(mc)
 
 		opts := ListOptions{
 			Limit: 10, Order: "desc", UnreadOnly: true,
@@ -122,7 +119,6 @@ func TestService_List(t *testing.T) {
 		mc.EXPECT().GetChannelMessages(gomock.Any(), "c1", gomock.Any()).Return(msgs, nil)
 		mc.EXPECT().GetMyUnreadChannels(gomock.Any()).
 			Return(nil, errors.New("unread failed")).AnyTimes()
-		stubEnrichment(mc)
 
 		opts := validListOptions()
 		opts.ShowUnread = true

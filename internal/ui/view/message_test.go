@@ -2,6 +2,8 @@ package view
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -9,8 +11,11 @@ import (
 	"github.com/moznion/go-optional"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/traPtitech/go-traq"
+
+	itraq "github.com/akimon658/traq-cli/internal/traq"
 )
 
 const (
@@ -19,16 +24,56 @@ const (
 	testOrigin   = "https://q.trap.jp"
 )
 
+// stubUsers は GetUserByID を map 参照でモックする。未登録IDはエラーにしフォールバックさせる。
+func stubUsers(mc *itraq.MockClient, users map[string]traq.User) {
+	mc.EXPECT().GetUserByID(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) (traq.User, error) {
+			if u, ok := users[id]; ok {
+				return u, nil
+			}
+			return traq.User{}, errors.New("user not found: " + id)
+		},
+	).AnyTimes()
+}
+
+// stubStamps は GetStampName を map 参照でモックする。未登録IDはエラーにしフォールバックさせる。
+func stubStamps(mc *itraq.MockClient, names map[string]string) {
+	mc.EXPECT().GetStampName(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) (string, error) {
+			if n, ok := names[id]; ok {
+				return n, nil
+			}
+			return "", errors.New("stamp not found: " + id)
+		},
+	).AnyTimes()
+}
+
+// stubSelf は GetSelfIDAndGroups を固定値でモックする。
+func stubSelf(mc *itraq.MockClient, selfID string, groups map[string]struct{}) {
+	if groups == nil {
+		groups = map[string]struct{}{}
+	}
+	mc.EXPECT().GetSelfIDAndGroups(gomock.Any()).Return(selfID, groups, nil).AnyTimes()
+}
+
+func newTestRenderer(mc *itraq.MockClient, loc *time.Location) *MessageRenderer {
+	mc.EXPECT().Origin().Return(testOrigin).AnyTimes()
+	return NewMessageRenderer(mc, loc)
+}
+
 func TestWriteMessageList(t *testing.T) {
 	t.Parallel()
 	t.Run("order and format", func(t *testing.T) {
 		t.Parallel()
-		loc := time.UTC
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-		users := map[string]traq.User{
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{
 			"u1": {Id: "u1", Name: "alice", DisplayName: "Alice Smith"},
 			"u2": {Id: "u2", Name: "bob", DisplayName: "bob"},
-		}
+		})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC)
 		// 取得順は desc (新しい順) を想定
 		msgs := []traq.Message{
 			{
@@ -43,10 +88,9 @@ func TestWriteMessageList(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
-			Msgs: msgs, Users: users, Loc: loc,
-			Stamps: map[string]string{},
+			Msgs: msgs,
 		}))
 
 		want := strings.Join([]string{
@@ -65,6 +109,13 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("stamps", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{
+			"u1": {Id: "u1", Name: "alice", DisplayName: "alice"},
+		})
+		stubStamps(mc, map[string]string{"s1": "ok", "s2": "thank"})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC)
 		msgs := []traq.Message{{
 			Id: "m1", UserId: "u1", Content: "hello",
 			CreatedAt: base, UpdatedAt: base,
@@ -75,14 +126,9 @@ func TestWriteMessageList(t *testing.T) {
 		}}
 
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
 			Msgs: msgs,
-			Users: map[string]traq.User{
-				"u1": {Id: "u1", Name: "alice", DisplayName: "alice"},
-			},
-			Stamps: map[string]string{"s1": "ok", "s2": "thank"},
-			Loc:    time.UTC,
 		}))
 
 		want := strings.Join([]string{
@@ -100,7 +146,11 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("unread divider", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-		users := map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}}
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC)
 		msgs := []traq.Message{
 			{Id: "m1", UserId: "u1", Content: "read", CreatedAt: base, UpdatedAt: base},
 			{
@@ -113,14 +163,11 @@ func TestWriteMessageList(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
-			Label:  "#general",
-			Limit:  10,
-			Order:  "desc",
-			Msgs:   msgs,
-			Users:  users,
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
+			Label: "#general",
+			Limit: 10,
+			Order: "desc",
+			Msgs:  msgs,
 			Unread: optional.Some(traq.UnreadChannel{
 				ChannelId:       "c1",
 				Count:           5,
@@ -140,17 +187,19 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("unread not in page", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC)
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general",
 			Limit: 10,
 			Order: "desc",
 			Msgs: []traq.Message{
 				{Id: "m1", UserId: "u1", Content: "hi", CreatedAt: base, UpdatedAt: base},
 			},
-			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
 			Unread: optional.Some(
 				traq.UnreadChannel{ChannelId: "c1", Count: 3, OldestMessageId: "other"},
 			),
@@ -160,7 +209,11 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("unread only", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-		users := map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}}
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC)
 		msgs := []traq.Message{
 			{Id: "m1", UserId: "u1", Content: "unread-1", CreatedAt: base, UpdatedAt: base},
 			{
@@ -173,14 +226,11 @@ func TestWriteMessageList(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
-			Label:  "#general",
-			Limit:  10,
-			Order:  "desc",
-			Msgs:   msgs,
-			Users:  users,
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
+			Label: "#general",
+			Limit: 10,
+			Order: "desc",
+			Msgs:  msgs,
 			Unread: optional.Some(traq.UnreadChannel{
 				ChannelId:       "c1",
 				Count:           7,
@@ -203,17 +253,19 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("unread only partial", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC)
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general",
 			Limit: 2,
 			Order: "desc",
 			Msgs: []traq.Message{
 				{Id: "m1", UserId: "u1", Content: "hi", CreatedAt: base, UpdatedAt: base},
 			},
-			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
 			Unread: optional.Some(traq.UnreadChannel{
 				ChannelId:       "c1",
 				Count:           5,
@@ -225,15 +277,14 @@ func TestWriteMessageList(t *testing.T) {
 	})
 	t.Run("unread only no unread", func(t *testing.T) {
 		t.Parallel()
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		r := newTestRenderer(mc, time.UTC)
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label:      "#general",
 			Limit:      10,
 			Order:      "desc",
 			Msgs:       nil,
-			Users:      map[string]traq.User{},
-			Stamps:     map[string]string{},
-			Loc:        time.UTC,
 			UnreadOnly: true,
 		}))
 		assert.Equal(t, "#general (未読0件)\n\n", buf.String())
@@ -241,12 +292,15 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("user not found fallback", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC)
 		var buf bytes.Buffer
-		err := WriteMessageList(&buf, MessageList{
+		err := r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
-			Msgs:   []traq.Message{{Id: "m1", UserId: "missing", CreatedAt: base, UpdatedAt: base}},
-			Users:  map[string]traq.User{},
-			Stamps: map[string]string{}, Loc: time.UTC,
+			Msgs: []traq.Message{{Id: "m1", UserId: "missing", CreatedAt: base, UpdatedAt: base}},
 		})
 		require.NoError(t, err)
 		assert.Contains(t, buf.String(), "(ユーザー解決失敗 id:missing)")
@@ -261,14 +315,17 @@ func TestWriteMessageList(t *testing.T) {
 		t.Parallel()
 		jst := time.FixedZone("JST", 9*60*60)
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, jst)
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
 			Msgs: []traq.Message{
 				{Id: "m1", UserId: "u1", Content: "hi", CreatedAt: base, UpdatedAt: base},
 			},
-			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-			Stamps: map[string]string{}, Loc: jst,
 		}))
 		assert.Contains(t, buf.String(), "2026-10-17T19:00:00+09:00")
 	})
@@ -276,30 +333,27 @@ func TestWriteMessageList(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
 		qtime := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
-		users := map[string]traq.User{
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{
 			"u1": {Id: "u1", Name: "alice", DisplayName: "alice"},
 			"u2": {Id: "u2", Name: "carol", DisplayName: "Carol"},
-		}
+		})
+		stubStamps(mc, map[string]string{"s1": "ok"})
+		stubSelf(mc, "", nil)
+		mc.EXPECT().GetMessage(gomock.Any(), testQuoteID1).Return(&traq.Message{
+			Id: "m2", UserId: "u2", Content: "quoted body",
+			CreatedAt: qtime, UpdatedAt: qtime,
+		}, nil).AnyTimes()
+		r := newTestRenderer(mc, time.UTC)
 		content := "hi " + `!{"type":"user","raw":"@carol","id":"u2"}` + "\n" +
 			`!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
 			Msgs: []traq.Message{{
 				Id: "m1", UserId: "u1", Content: content,
 				CreatedAt: base, UpdatedAt: base,
 				Stamps: []traq.MessageStamp{{StampId: "s1", Count: 2}},
-			}},
-			Users:  users,
-			Stamps: map[string]string{"s1": "ok"},
-			Loc:    time.UTC,
-			Origin: testOrigin,
-			Quoted: map[string]traq.Message{testQuoteID1: {
-				Id: "m2", UserId: "u2", Content: "quoted body",
-				CreatedAt: qtime, UpdatedAt: qtime,
-			}},
-			Files: map[string]traq.FileInfo{testFileID1: {
-				Id: testFileID1, Name: "report.pdf", Mime: "application/pdf", Size: 12345,
 			}},
 		}))
 		out := buf.String()
@@ -312,40 +366,43 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("quote fetch failure", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		mc.EXPECT().GetMessage(gomock.Any(), testQuoteID1).
+			Return(nil, errors.New("gone")).AnyTimes()
+		r := newTestRenderer(mc, time.UTC)
 		content := `!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
 			Msgs: []traq.Message{{
 				Id: "m1", UserId: "u1", Content: content,
 				CreatedAt: base, UpdatedAt: base,
 			}},
-			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
-			Quoted: map[string]traq.Message{},
-			Files:  map[string]traq.FileInfo{},
 		}))
 		assert.Contains(t, buf.String(), "引用 (取得失敗 id:"+testQuoteID1+")")
 	})
 	t.Run("file section", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		mc.EXPECT().GetFileMeta(gomock.Any(), testFileID1).Return(&traq.FileInfo{
+			Id: testFileID1, Name: "report.pdf", Mime: "application/pdf", Size: 12345,
+		}, nil).AnyTimes()
+		r := newTestRenderer(mc, time.UTC)
 		content := "doc\n" +
 			`!{"type":"file","raw":"r","id":"` + testFileID1 + `"}`
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
 			Msgs: []traq.Message{{
 				Id: "m1", UserId: "u1", Content: content,
 				CreatedAt: base, UpdatedAt: base,
-			}},
-			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
-			Quoted: map[string]traq.Message{},
-			Files: map[string]traq.FileInfo{testFileID1: {
-				Id: testFileID1, Name: "report.pdf", Mime: "application/pdf", Size: 12345,
 			}},
 		}))
 		out := buf.String()
@@ -356,15 +413,17 @@ func TestWriteMessageList(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
 		total := int64(42)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC)
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "search \"foo\"", Limit: 10, Offset: 0, Sort: "-createdAt",
 			Msgs: []traq.Message{
 				{Id: "m1", UserId: "u1", Content: "hello foo", CreatedAt: base, UpdatedAt: base},
 			},
-			Users:     map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-			Stamps:    map[string]string{},
-			Loc:       time.UTC,
 			TotalHits: optional.Some(total),
 		}))
 		out := buf.String()
@@ -374,25 +433,25 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("self mention", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{
+			"me": {Id: "me", Name: "alice", DisplayName: "alice"},
+			"u2": {Id: "u2", Name: "bob", DisplayName: "bob"},
+		})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "me", map[string]struct{}{"g1": {}})
+		r := newTestRenderer(mc, time.UTC)
 		content := `hi !{"type":"user","raw":"@alice","id":"me"}` +
 			` and !{"type":"user","raw":"@bob","id":"u2"}` +
 			` and !{"type":"group","raw":"@team","id":"g1"}` +
 			` and !{"type":"group","raw":"@other","id":"g2"}`
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
 			Msgs: []traq.Message{{
 				Id: "m1", UserId: "u2", Content: content,
 				CreatedAt: base, UpdatedAt: base,
 			}},
-			Users: map[string]traq.User{
-				"me": {Id: "me", Name: "alice", DisplayName: "alice"},
-				"u2": {Id: "u2", Name: "bob", DisplayName: "bob"},
-			},
-			Stamps:   map[string]string{},
-			Loc:      time.UTC,
-			SelfID:   "me",
-			MyGroups: map[string]struct{}{"g1": {}},
 		}))
 		out := buf.String()
 		assert.Contains(t, out, "id:m1 [to you]")
@@ -401,20 +460,20 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("no self mention", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u2": {Id: "u2", Name: "bob", DisplayName: "bob"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "me", map[string]struct{}{"g1": {}})
+		r := newTestRenderer(mc, time.UTC)
 		content := `hi !{"type":"user","raw":"@bob","id":"u2"}` +
 			` and !{"type":"group","raw":"@other","id":"g2"}`
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
 			Msgs: []traq.Message{{
 				Id: "m1", UserId: "u2", Content: content,
 				CreatedAt: base, UpdatedAt: base,
 			}},
-			Users:    map[string]traq.User{"u2": {Id: "u2", Name: "bob", DisplayName: "bob"}},
-			Stamps:   map[string]string{},
-			Loc:      time.UTC,
-			SelfID:   "me",
-			MyGroups: map[string]struct{}{"g1": {}},
 		}))
 		out := buf.String()
 		assert.NotContains(t, out, "[to you]")
@@ -423,26 +482,27 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("self mention does not light header", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-		content := `!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{
+			"me": {Id: "me", Name: "alice", DisplayName: "alice"},
+			"u2": {Id: "u2", Name: "bob", DisplayName: "bob"},
+		})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "me", nil)
 		quotedContent := `hi !{"type":"user","raw":"@alice","id":"me"}`
+		mc.EXPECT().GetMessage(gomock.Any(), testQuoteID1).Return(&traq.Message{
+			Id: "q1", UserId: "u2", Content: quotedContent,
+			CreatedAt: base, UpdatedAt: base,
+		}, nil).AnyTimes()
+		r := newTestRenderer(mc, time.UTC)
+		content := `!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
 		var buf bytes.Buffer
-		require.NoError(t, WriteMessageList(&buf, MessageList{
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
 			Msgs: []traq.Message{{
 				Id: "m1", UserId: "u2", Content: content,
 				CreatedAt: base, UpdatedAt: base,
 			}},
-			Users: map[string]traq.User{
-				"me": {Id: "me", Name: "alice", DisplayName: "alice"},
-				"u2": {Id: "u2", Name: "bob", DisplayName: "bob"},
-			},
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
-			Quoted: map[string]traq.Message{testQuoteID1: {
-				Id: "q1", UserId: "u2", Content: quotedContent,
-				CreatedAt: base, UpdatedAt: base,
-			}},
-			SelfID: "me",
 		}))
 		out := buf.String()
 		assert.Contains(t, out, "引用 @bob 2026-10-17T10:00:00Z id:q1")
@@ -525,7 +585,11 @@ func TestFormatStampItems(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, FormatStampItems(tt.stamps, tt.names))
+			mc := itraq.NewMockClient(gomock.NewController(t))
+			stubStamps(mc, tt.names)
+			stubSelf(mc, "", nil)
+			r := newTestRenderer(mc, time.UTC)
+			assert.Equal(t, tt.want, r.formatStampItems(t.Context(), tt.stamps))
 		})
 	}
 }
@@ -533,20 +597,19 @@ func TestFormatStampItems(t *testing.T) {
 func TestFormatQuoteUserNotFoundFallback(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	common := CommonParams{
-		Users: map[string]traq.User{},
-		Loc:   time.UTC,
-		Quoted: map[string]traq.Message{
-			"q1": {
-				Id:        "q1",
-				UserId:    "gone",
-				Content:   "quoted text",
-				CreatedAt: base,
-				UpdatedAt: base,
-			},
-		},
-	}
-	lines := FormatQuote("q1", common)
+	mc := itraq.NewMockClient(gomock.NewController(t))
+	stubUsers(mc, map[string]traq.User{})
+	stubStamps(mc, map[string]string{})
+	stubSelf(mc, "", nil)
+	mc.EXPECT().GetMessage(gomock.Any(), "q1").Return(&traq.Message{
+		Id:        "q1",
+		UserId:    "gone",
+		Content:   "quoted text",
+		CreatedAt: base,
+		UpdatedAt: base,
+	}, nil).AnyTimes()
+	r := newTestRenderer(mc, time.UTC)
+	lines := r.formatQuote(t.Context(), "q1")
 	out := strings.Join(lines, "\n")
 	assert.Contains(t, out, "(ユーザー解決失敗 id:gone)")
 	assert.NotContains(
@@ -568,17 +631,17 @@ func TestWriteChannelLabel(t *testing.T) {
 func TestWriteGetMessage(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	mc := itraq.NewMockClient(gomock.NewController(t))
+	stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+	stubStamps(mc, map[string]string{})
+	stubSelf(mc, "", nil)
+	r := newTestRenderer(mc, time.UTC)
 	var buf bytes.Buffer
-	require.NoError(t, WriteGetMessage(&buf, GetViewParams{
+	require.NoError(t, r.WriteGetMessage(t.Context(), &buf, GetViewParams{
 		Label: "#general",
 		Msg: traq.Message{
 			Id: "m1", UserId: "u1", Content: "hello",
 			CreatedAt: base, UpdatedAt: base,
-		},
-		CommonParams: CommonParams{
-			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
 		},
 	}))
 	want := strings.Join([]string{
@@ -594,16 +657,16 @@ func TestWriteGetMessage(t *testing.T) {
 func TestWriteSingleMessage(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	mc := itraq.NewMockClient(gomock.NewController(t))
+	stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+	stubStamps(mc, map[string]string{})
+	stubSelf(mc, "", nil)
+	r := newTestRenderer(mc, time.UTC)
 	var buf bytes.Buffer
-	require.NoError(t, WriteSingleMessage(&buf, SingleViewParams{
+	require.NoError(t, r.WriteSingleMessage(t.Context(), &buf, SingleViewParams{
 		Msg: traq.Message{
 			Id: "m1", UserId: "u1", Content: "hello",
 			CreatedAt: base, UpdatedAt: base,
-		},
-		CommonParams: CommonParams{
-			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
-			Stamps: map[string]string{},
-			Loc:    time.UTC,
 		},
 	}))
 	want := strings.Join([]string{

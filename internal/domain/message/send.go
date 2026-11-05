@@ -2,7 +2,6 @@ package message
 
 import (
 	"context"
-	"time"
 )
 
 // Send はチャンネルにメッセージを投稿し、表示用の付随情報と共に返す。
@@ -18,14 +17,7 @@ func (s *Service) Send(
 	if err != nil {
 		return SendResult{}, err
 	}
-	enrich, err := s.GetEnrichment(ctx, []string{msg.Content})
-	if err != nil {
-		return SendResult{}, err
-	}
 	return SendResult{
-		Msg:        *msg,
-		Enrichment: enrich,
-		Loc:        time.Local,
-		Origin:     s.origin(),
+		Msg: *msg,
 	}, nil
 }

@@ -18,8 +18,3 @@ func NewService(api traq.Client) *Service {
 		api: api,
 	}
 }
-
-// origin は表示用・埋め込み検出用の origin を返す。正典は traq.Client。
-func (s *Service) origin() string {
-	return s.api.Origin()
-}
