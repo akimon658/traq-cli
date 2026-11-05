@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -232,6 +233,7 @@ func (r *MessageRenderer) selfInfo(ctx context.Context) (string, map[string]stru
 	}
 	selfID, groups, err := r.client.GetSelfIDAndGroups(ctx)
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "warning: failed to resolve self info:", err)
 		return "", nil
 	}
 	return selfID, groups
@@ -245,6 +247,7 @@ func (r *MessageRenderer) userDisplay(ctx context.Context, id string) string {
 	}
 	u, err := r.client.GetUserByID(ctx, id)
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "warning: failed to resolve user:", err)
 		return UserFallbackLabel(id)
 	}
 	return UserLabel(u)
@@ -257,6 +260,7 @@ func (r *MessageRenderer) stampName(ctx context.Context, id string) string {
 	}
 	name, err := r.client.GetStampName(ctx, id)
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "warning: failed to resolve stamp:", err)
 		return id
 	}
 	return name
@@ -327,6 +331,14 @@ func (r *MessageRenderer) formatQuote(ctx context.Context, quoteID string) []str
 	}
 	qm, err := r.client.GetMessage(ctx, quoteID)
 	if err != nil || qm == nil {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "warning: failed to resolve quoted message:", err)
+		} else {
+			fmt.Fprintln(
+				os.Stderr,
+				"warning: failed to resolve quoted message: nil message id:"+quoteID,
+			)
+		}
 		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", quoteID)}
 	}
 	loc := time.Local
@@ -364,6 +376,11 @@ func (r *MessageRenderer) formatFile(ctx context.Context, id string) string {
 	}
 	fi, err := r.client.GetFileMeta(ctx, id)
 	if err != nil || fi == nil {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "warning: failed to resolve file metadata:", err)
+		} else {
+			fmt.Fprintln(os.Stderr, "warning: failed to resolve file metadata: nil metadata id:"+id)
+		}
 		return fmt.Sprintf("(取得失敗 id:%s)", id)
 	}
 	return fmt.Sprintf("%s (%s, %d bytes, id:%s)", fi.Name, fi.Mime, fi.Size, fi.Id)

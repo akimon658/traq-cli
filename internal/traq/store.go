@@ -135,23 +135,27 @@ func (s defaultStore) Load() (Token, string, bool, error) {
 
 func (s defaultStore) Delete() (bool, error) {
 	found := false
+	var keyringErr error
 	if r, err := s.openKeyring(); err == nil {
 		if _, e := r.Get(storeItem); e == nil {
 			found = true
 		}
-		_ = r.Remove(storeItem)
+		if rerr := r.Remove(storeItem); rerr != nil && !errors.Is(rerr, keyring.ErrKeyNotFound) {
+			keyringErr = rerr
+		}
 	}
 	path, err := s.filePath()
 	if err != nil {
-		return found, err
+		return found, errors.Join(keyringErr, err)
 	}
 	if _, serr := os.Stat(path); serr == nil {
 		found = true
 	}
+	var fileErr error
 	if rerr := os.Remove(path); rerr != nil && !errors.Is(rerr, os.ErrNotExist) {
-		return found, rerr
+		fileErr = rerr
 	}
-	return found, nil
+	return found, errors.Join(keyringErr, fileErr)
 }
 
 func (s defaultStore) saveKeyring(data []byte) string {

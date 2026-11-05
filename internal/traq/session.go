@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
 )
@@ -57,7 +58,9 @@ func (s *Service) ResolveToken(
 		}
 		nt, rerr := s.Refresh(ctx, stored)
 		if rerr != nil {
-			_, _ = s.store.Delete()
+			if _, derr := s.store.Delete(); derr != nil {
+				fmt.Fprintln(os.Stderr, "warning: failed to delete stored credentials:", derr)
+			}
 			return ResolvedToken{}, exit.AuthRequiredError(
 				fmt.Errorf("refresh failed: %v; run 'traq auth login'", rerr),
 			)

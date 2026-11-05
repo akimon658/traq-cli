@@ -1,6 +1,7 @@
 package traq
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -180,5 +181,61 @@ func TestDefaultStore(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte(`{"accessToken":""}`), credentialsFilePerm))
 		_, _, _, err = s.Load()
 		assert.Error(t, err, "Load should fail on broken credentials")
+	})
+
+	t.Run("keyring remove failure still deletes file", func(t *testing.T) {
+		t.Parallel()
+		kr := NewMockKeyring(gomock.NewController(t))
+		keyringErr := errors.New("keyring remove failed")
+		gomock.InOrder(
+			kr.EXPECT().Get(storeItem).Return(
+				keyring.Item{Key: storeItem, Data: []byte(`{"accessToken":"x"}`)},
+				nil,
+			).Times(1),
+			kr.EXPECT().Remove(storeItem).Return(keyringErr).Times(1),
+		)
+		s := testStore(t, kr, nil)
+		path, err := s.filePath()
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), credentialsDirPerm))
+		require.NoError(t, os.WriteFile(
+			path,
+			[]byte(`{"accessToken":"stale-file"}`),
+			credentialsFilePerm,
+		))
+		found, err := s.Delete()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, keyringErr)
+		assert.True(t, found, "Delete should report found when either backend had credentials")
+		_, statErr := os.Stat(path)
+		assert.ErrorIs(t, statErr, os.ErrNotExist,
+			"file should be deleted even when keyring removal fails")
+	})
+
+	t.Run("delete joins keyring and file errors", func(t *testing.T) {
+		t.Parallel()
+		kr := NewMockKeyring(gomock.NewController(t))
+		keyringErr := errors.New("keyring remove failed")
+		filePathErr := errors.New("config dir unavailable")
+		gomock.InOrder(
+			kr.EXPECT().Get(storeItem).Return(
+				keyring.Item{Key: storeItem, Data: []byte(`{"accessToken":"x"}`)},
+				nil,
+			).Times(1),
+			kr.EXPECT().Remove(storeItem).Return(keyringErr).Times(1),
+		)
+		s := defaultStore{
+			openKeyring: func() (keyring.Keyring, error) {
+				return kr, nil
+			},
+			userConfigDir: func() (string, error) {
+				return "", filePathErr
+			},
+		}
+		found, err := s.Delete()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, keyringErr)
+		assert.ErrorIs(t, err, filePathErr)
+		assert.True(t, found)
 	})
 }
