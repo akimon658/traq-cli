@@ -22,9 +22,10 @@ func (s *Service) Get(
 		return GetResult{}, err
 	}
 	return GetResult{
-		Msg:        *msg,
-		Enrichment: enrich,
-		Loc:        time.Local,
-		Origin:     s.origin(),
+		Msg:          *msg,
+		ChannelLabel: s.channel.LookupLabelByID(ctx, msg.ChannelId),
+		Enrichment:   enrich,
+		Loc:          time.Local,
+		Origin:       s.origin(),
 	}, nil
 }

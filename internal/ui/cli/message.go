@@ -96,8 +96,9 @@ func newMessageGetCmd(newEnv func() *config.Env, flags *globalFlags) *cobra.Comm
 			if err != nil {
 				return err
 			}
-			return view.WriteSingleMessage(cmd.OutOrStdout(), view.SingleViewParams{
-				Msg: res.Msg,
+			return view.WriteGetMessage(cmd.OutOrStdout(), view.GetViewParams{
+				Label: res.ChannelLabel,
+				Msg:   res.Msg,
 				CommonParams: view.CommonParams{
 					Users:    res.Users,
 					Stamps:   res.Stamps,

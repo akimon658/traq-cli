@@ -531,6 +531,39 @@ func TestFormatQuoteSelfMentionDoesNotLightHeader(t *testing.T) {
 	assert.NotContains(t, out, "id:m1 [to you]", "header must not light up from a quoted mention")
 }
 
+func TestWriteChannelLabel(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	require.NoError(t, WriteChannelLabel(&buf, "#general"))
+	assert.Equal(t, "#general\n", buf.String())
+}
+
+func TestWriteGetMessage(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	var buf bytes.Buffer
+	require.NoError(t, WriteGetMessage(&buf, GetViewParams{
+		Label: "#general",
+		Msg: traq.Message{
+			Id: "m1", UserId: "u1", Content: "hello",
+			CreatedAt: base, UpdatedAt: base,
+		},
+		CommonParams: CommonParams{
+			Users:  map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}},
+			Stamps: map[string]string{},
+			Loc:    time.UTC,
+		},
+	}))
+	want := strings.Join([]string{
+		"#general",
+		"",
+		"2026-10-17T10:00:00Z @alice id:m1",
+		"  hello",
+		"",
+	}, "\n")
+	assert.Equal(t, want, buf.String())
+}
+
 func TestWriteSingleMessage(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)

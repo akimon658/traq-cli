@@ -48,6 +48,35 @@ func (s *Service) ResolveChannel(
 	return channelID, nil
 }
 
+// LookupLabelByID はチャンネルIDから表示用ラベルを返す。
+// 公開チャンネルは "#a/b"、DM は "@name"。
+// 取得失敗・未解決のときは channelID をそのまま返す (UUID フォールバック)。
+func (s *Service) LookupLabelByID(
+	ctx context.Context,
+	channelID string,
+) string {
+	list, err := s.api.GetChannels(ctx, true)
+	if err != nil || list == nil {
+		return channelID
+	}
+	var userNames map[string]string
+	for _, dm := range list.Dm {
+		if dm.Id != channelID {
+			continue
+		}
+		users, uerr := s.api.GetUsers(ctx)
+		if uerr != nil {
+			break
+		}
+		userNames = make(map[string]string, len(users))
+		for _, u := range users {
+			userNames[u.Id] = u.Name
+		}
+		break
+	}
+	return LabelForChannel(list, userNames, channelID)
+}
+
 // FetchUnreadGroups は未読情報を取得し、表示用のグループに分類して返す。
 func (s *Service) FetchUnreadGroups(
 	ctx context.Context,

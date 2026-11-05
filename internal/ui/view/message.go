@@ -77,9 +77,16 @@ type SearchViewParams struct {
 	CommonParams
 }
 
-// SingleViewParams は send / get の1件表示用の入力。
+// SingleViewParams は send の1件表示用の入力。
 type SingleViewParams struct {
 	Msg traq.Message
+	CommonParams
+}
+
+// GetViewParams は get の1件表示用の入力。先頭に投稿先チャンネルのラベル行を出す。
+type GetViewParams struct {
+	Label string
+	Msg   traq.Message
 	CommonParams
 }
 
@@ -199,6 +206,26 @@ func WriteSingleMessage(w io.Writer, params SingleViewParams) error {
 	}
 	_, err = fmt.Fprintln(w, block)
 	return err
+}
+
+// WriteChannelLabel はチャンネルのラベル行だけを出力する。
+func WriteChannelLabel(w io.Writer, label string) error {
+	_, err := fmt.Fprintln(w, label)
+	return err
+}
+
+// WriteGetMessage はチャンネルラベル行の後にメッセージ1件を出力する。
+func WriteGetMessage(w io.Writer, params GetViewParams) error {
+	if err := WriteChannelLabel(w, params.Label); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return err
+	}
+	return WriteSingleMessage(w, SingleViewParams{
+		Msg:          params.Msg,
+		CommonParams: params.CommonParams,
+	})
 }
 
 // UnreadDivider は未読境界の見出しを返す。

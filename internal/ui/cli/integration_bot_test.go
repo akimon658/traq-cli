@@ -90,6 +90,7 @@ func TestMessageGet(t *testing.T) {
 	assert.Contains(t, out, content)
 	assert.Contains(t, out, "id:"+m[1])
 	assert.Contains(t, out, "@BOT_traq-cli", "the author name should be resolved")
+	assert.Contains(t, out, "#general", "the posting channel should be shown")
 }
 
 func TestMessageGetNotFound(t *testing.T) {

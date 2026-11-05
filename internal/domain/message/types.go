@@ -87,6 +87,9 @@ type SendResult struct {
 // GetResult は message get の結果 (1件)。
 type GetResult struct {
 	Msg traq.Message
+	// ChannelLabel は投稿先チャンネルの表示用ラベル ("#a/b" / DM は "@name")。
+	// 解決できないときはチャンネル UUID。
+	ChannelLabel string
 	Enrichment
 	Loc    *time.Location
 	Origin string
