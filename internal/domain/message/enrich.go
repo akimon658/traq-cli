@@ -21,6 +21,7 @@ func (s *Service) GetEnrichment(
 		Files:    map[string]gotraq.FileInfo{},
 		MyGroups: map[string]struct{}{},
 	}
+	// 自分宛メンション判定用の補助情報なので、取得失敗時は空のまま続行する。
 	selfID, groups, _ := s.api.GetSelfIDAndGroups(ctx)
 	out.SelfID = selfID
 	out.MyGroups = groups
