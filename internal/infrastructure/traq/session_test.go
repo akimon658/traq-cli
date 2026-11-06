@@ -21,7 +21,7 @@ func TestService_ResolveToken(t *testing.T) {
 	t.Run("prefers environment", func(t *testing.T) {
 		t.Parallel()
 		ms := auth.NewMockStore(gomock.NewController(t))
-		svc := NewService(DefaultOrigin, "client", ms, nil)
+		svc := NewService(auth.DefaultOrigin, "client", ms, nil)
 		rt, err := svc.ResolveToken(t.Context(), "", "env-token")
 		require.NoError(t, err)
 		assert.Equal(t, "environment", rt.Source)
@@ -31,7 +31,7 @@ func TestService_ResolveToken(t *testing.T) {
 	t.Run("prefers flag", func(t *testing.T) {
 		t.Parallel()
 		ms := auth.NewMockStore(gomock.NewController(t))
-		svc := NewService(DefaultOrigin, "client", ms, nil)
+		svc := NewService(auth.DefaultOrigin, "client", ms, nil)
 		rt, err := svc.ResolveToken(t.Context(), "flag-token", "env-token")
 		require.NoError(t, err)
 		assert.Equal(t, "flag", rt.Source)
@@ -45,10 +45,10 @@ func TestService_ResolveToken(t *testing.T) {
 			Method:      auth.MethodOAuth,
 			AccessToken: "stored-token",
 			Scope:       []string{auth.ScopeRead},
-			Origin:      DefaultOrigin,
+			Origin:      auth.DefaultOrigin,
 			ExpiresAt:   time.Now().Add(24 * time.Hour),
 		}, "keychain", true, nil).Times(1)
-		svc := NewService(DefaultOrigin, "client", ms, nil)
+		svc := NewService(auth.DefaultOrigin, "client", ms, nil)
 		rt, err := svc.ResolveToken(t.Context(), "", "")
 		require.NoError(t, err)
 		assert.Equal(t, "keychain", rt.Source)
@@ -59,7 +59,7 @@ func TestService_ResolveToken(t *testing.T) {
 		t.Parallel()
 		ms := auth.NewMockStore(gomock.NewController(t))
 		ms.EXPECT().Load().Return(auth.Token{}, "", false, nil).Times(1)
-		svc := NewService(DefaultOrigin, "client", ms, nil)
+		svc := NewService(auth.DefaultOrigin, "client", ms, nil)
 		_, err := svc.ResolveToken(t.Context(), "", "")
 		var ec *exit.Error
 		require.ErrorAs(t, err, &ec)
@@ -74,7 +74,7 @@ func TestService_ResolveToken(t *testing.T) {
 			AccessToken: "expired-token",
 			ExpiresAt:   time.Now().Add(-1 * time.Hour),
 		}, "keychain", true, nil).Times(1)
-		svc := NewService(DefaultOrigin, "client", ms, nil)
+		svc := NewService(auth.DefaultOrigin, "client", ms, nil)
 		_, err := svc.ResolveToken(t.Context(), "", "")
 		var ec *exit.Error
 		require.ErrorAs(t, err, &ec)
