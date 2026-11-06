@@ -243,12 +243,12 @@ func (r *MessageRenderer) selfInfo(ctx context.Context) (string, map[string]stru
 // 解決失敗時はIDフォールバック表示に倒す。
 func (r *MessageRenderer) userDisplay(ctx context.Context, id string) string {
 	if r == nil || r.client == nil {
-		return UserFallbackLabel(id)
+		return itraq.FormatUserFallback(id)
 	}
 	u, err := r.client.GetUserByID(ctx, id)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "warning: failed to resolve user:", err)
-		return UserFallbackLabel(id)
+		return itraq.FormatUserFallback(id)
 	}
 	return UserLabel(u)
 }

@@ -7,7 +7,6 @@ import (
 )
 
 // FormatUserFallback はユーザーIDが解決できなかったときの表示を返す。
-// 実在しうる "@name" 形式と衝突しない形式にする。正典はこの関数である。
 func FormatUserFallback(id string) string {
 	return fmt.Sprintf("(ユーザー解決失敗 id:%s)", id)
 }

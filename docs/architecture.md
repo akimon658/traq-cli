@@ -75,7 +75,7 @@ foundation/config → domain/auth のみ (infrastructure を知らない)
 - `file`: ファイル取得と保存先解決。`Origin` を必要としない
 - `message`: メッセージ取得・検索・投稿。`Origin` は保持せず `Client.Origin()` から取得する。表示に必要な解決は `view.MessageRenderer` が `domain/traq.Client` 経由で遅延取得する
 - ユーザー・スタンプ・自ユーザー・チャンネルの単品解決 (`GetUserByID` / `GetStampName` / `GetSelfIDAndGroups` / `ResolveChannelID` / `ResolveUserIDs` / `GetChannelLabel` 等) は `domain/traq.Client` が行う。キャッシュがあるためドメイン側・表示間で結果を引き回さない。一覧系 (`GetUserNameMap` / `GetStampNameMap`) はチャンネルラベル解決など必要な箇所でのみ使う
-- `domain/traq.FormatUserFallback` はユーザー解決失敗時の正規の表示形式。`channel` と `view` が共有する
+- `domain/traq` は表示用の純粋なラベル整形を提供し、`domain/channel`・`ui/view`・`infrastructure/traq` が共有する
 
 ## 実行フロー
 

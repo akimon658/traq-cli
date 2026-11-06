@@ -7,8 +7,6 @@ import (
 	"time"
 
 	gotraq "github.com/traPtitech/go-traq"
-
-	"github.com/akimon658/traq-cli/internal/domain/traq"
 )
 
 // WriteMyUserDetail は自分のユーザー詳細を可読性の高いテキストで出力する。
@@ -80,12 +78,6 @@ func UserLabel(u gotraq.User) string {
 		label += " (" + u.DisplayName + ")"
 	}
 	return label
-}
-
-// UserFallbackLabel はユーザーIDが解決できなかったときの表示を返す。
-// 形式の正規の定義は traq.FormatUserFallback。
-func UserFallbackLabel(id string) string {
-	return traq.FormatUserFallback(id)
 }
 
 // UserStateLabel はアカウント状態を可読名で返す。
