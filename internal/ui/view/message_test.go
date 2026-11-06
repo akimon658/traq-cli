@@ -15,7 +15,7 @@ import (
 
 	"github.com/traPtitech/go-traq"
 
-	itraq "github.com/akimon658/traq-cli/internal/traq"
+	itraq "github.com/akimon658/traq-cli/internal/domain/traq"
 )
 
 const (

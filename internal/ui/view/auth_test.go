@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/akimon658/traq-cli/internal/traq"
+	"github.com/akimon658/traq-cli/internal/domain/auth"
 )
 
 func TestWriteAuthStatus(t *testing.T) {
@@ -17,8 +17,8 @@ func TestWriteAuthStatus(t *testing.T) {
 	t.Run("bot", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
-		require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "environment", traq.Token{
-			Method:   traq.MethodBot,
+		require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "environment", auth.Token{
+			Method:   auth.MethodBot,
 			UserID:   "user-id",
 			UserName: "BOT_x",
 			UserBot:  true,
@@ -37,9 +37,9 @@ func TestWriteAuthStatus(t *testing.T) {
 		t.Parallel()
 		expires := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
 		var buf bytes.Buffer
-		require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "keychain", traq.Token{
-			Method:    traq.MethodOAuth,
-			Scope:     []string{traq.ScopeRead},
+		require.NoError(t, WriteAuthStatus(&buf, "https://example.com", "keychain", auth.Token{
+			Method:    auth.MethodOAuth,
+			Scope:     []string{auth.ScopeRead},
 			UserID:    "user-id",
 			UserName:  "alice",
 			ExpiresAt: expires,
@@ -53,7 +53,7 @@ func TestWriteAuthStatus(t *testing.T) {
 
 func TestAuthStatusMethod(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "bot", AuthStatusMethod(&traq.Token{Method: traq.MethodBot, UserBot: true}))
-	assert.Equal(t, "oauth", AuthStatusMethod(&traq.Token{Method: traq.MethodOAuth}))
-	assert.Equal(t, "", AuthStatusMethod(&traq.Token{}))
+	assert.Equal(t, "bot", AuthStatusMethod(&auth.Token{Method: auth.MethodBot, UserBot: true}))
+	assert.Equal(t, "oauth", AuthStatusMethod(&auth.Token{Method: auth.MethodOAuth}))
+	assert.Equal(t, "", AuthStatusMethod(&auth.Token{}))
 }

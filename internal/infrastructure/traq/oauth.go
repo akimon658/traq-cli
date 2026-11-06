@@ -1,0 +1,160 @@
+package traq
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/akimon658/traq-cli/internal/domain/auth"
+)
+
+type tokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+}
+
+func (s *Service) exchangeCode(
+	ctx context.Context,
+	code, redirectURI, verifier string,
+) (tokenResponse, error) {
+	if s.clientID == "" {
+		return tokenResponse{}, errors.New(
+			"OAuth client ID is not configured; run `traq auth login --browser` after setting TRAQ_CLIENT_ID or --client-id (see docs/auth.md)",
+		)
+	}
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {redirectURI},
+		"client_id":     {s.clientID},
+		"code_verifier": {verifier},
+	}
+	return requestToken(ctx, s.origin, form)
+}
+
+// Refresh は OAuth トークンを更新する。
+// 保存トークンに記録された Origin を優先し、無ければ Service の origin を使う。
+func (s *Service) Refresh(ctx context.Context, prev auth.Token) (auth.Token, error) {
+	if prev.RefreshToken == "" {
+		return auth.Token{}, errors.New("no refresh token available")
+	}
+	if s.clientID == "" {
+		return auth.Token{}, errors.New(
+			"OAuth client ID is not configured; set TRAQ_CLIENT_ID or --client-id (see docs/auth.md)",
+		)
+	}
+	form := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {prev.RefreshToken},
+		"client_id":     {s.clientID},
+	}
+	resp, err := requestToken(ctx, prev.OriginOr(s.origin), form)
+	if err != nil {
+		return auth.Token{}, err
+	}
+	t := prev
+	t.AccessToken = resp.AccessToken
+	if resp.RefreshToken != "" {
+		t.RefreshToken = resp.RefreshToken
+	}
+	now := time.Now()
+	t.IssuedAt = now
+	if resp.ExpiresIn > 0 {
+		t.ExpiresAt = now.Add(time.Duration(resp.ExpiresIn) * time.Second)
+	} else {
+		t.ExpiresAt = time.Time{}
+	}
+	if resp.Scope != "" {
+		t.Scope = auth.ParseScopes(resp.Scope)
+	}
+	return t, nil
+}
+
+const (
+	httpStatusMinSuccess = 200
+	httpStatusMaxSuccess = 299
+)
+
+func Revoke(ctx context.Context, origin, accessToken string) error {
+	form := url.Values{"token": {accessToken}}
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		origin+revokePath,
+		strings.NewReader(form.Encode()),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < httpStatusMinSuccess || resp.StatusCode > httpStatusMaxSuccess {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to revoke the token (HTTP %d)", resp.StatusCode)
+		}
+		return fmt.Errorf(
+			"failed to revoke the token (HTTP %d): %s",
+			resp.StatusCode,
+			strings.TrimRight(string(body), "\n"),
+		)
+	}
+	return nil
+}
+
+func requestToken(ctx context.Context, origin string, form url.Values) (tokenResponse, error) {
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		origin+tokenPath,
+		strings.NewReader(form.Encode()),
+	)
+	if err != nil {
+		return tokenResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return tokenResponse{}, fmt.Errorf("token request failed: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return tokenResponse{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return tokenResponse{}, fmt.Errorf(
+			"token request failed (HTTP %d): %s",
+			resp.StatusCode,
+			strings.TrimRight(string(body), "\n"),
+		)
+	}
+	var res tokenResponse
+	if err := json.Unmarshal(body, &res); err != nil {
+		return tokenResponse{}, err
+	}
+	if res.AccessToken == "" {
+		return tokenResponse{}, fmt.Errorf(
+			"token request failed: no access token in the response: %s",
+			strings.TrimRight(string(body), "\n"),
+		)
+	}
+	return res, nil
+}

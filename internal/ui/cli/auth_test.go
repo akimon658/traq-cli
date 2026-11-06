@@ -8,10 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/akimon658/traq-cli/internal/auth"
+	"github.com/akimon658/traq-cli/internal/domain/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
-	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 func TestAuthLogin(t *testing.T) {
@@ -47,7 +46,7 @@ func TestAuthLogin(t *testing.T) {
 	t.Run("usage manual without client id", func(t *testing.T) {
 		t.Parallel()
 		e := &config.Env{
-			Store:    traq.NewMockStore(gomock.NewController(t)),
+			Store:    auth.NewMockStore(gomock.NewController(t)),
 			Sessions: auth.NewMockSessionStore(gomock.NewController(t)),
 		}
 		_, err := runCLI(t, e, "auth", "login", "--manual")
@@ -64,7 +63,7 @@ func TestAuthComplete(t *testing.T) {
 	newEnv := func(t *testing.T) *config.Env {
 		t.Helper()
 		return &config.Env{
-			Store:    traq.NewMockStore(gomock.NewController(t)),
+			Store:    auth.NewMockStore(gomock.NewController(t)),
 			Sessions: auth.NewMockSessionStore(gomock.NewController(t)),
 		}
 	}
@@ -104,7 +103,7 @@ func TestAuthComplete(t *testing.T) {
 				return auth.ManualSession{Verifier: "v", State: "right"}, true, nil
 			},
 		).Times(1)
-		ms := traq.NewMockStore(gomock.NewController(t))
+		ms := auth.NewMockStore(gomock.NewController(t))
 
 		e := &config.Env{Store: ms, Sessions: mp}
 		_, err := runCLI(
@@ -122,7 +121,7 @@ func TestAuthComplete(t *testing.T) {
 		mp := auth.NewMockSessionStore(gomock.NewController(t))
 		mp.EXPECT().Load(gomock.Any()).Return(auth.ManualSession{}, false, nil).Times(1)
 
-		e := &config.Env{Store: traq.NewMockStore(gomock.NewController(t)), Sessions: mp}
+		e := &config.Env{Store: auth.NewMockStore(gomock.NewController(t)), Sessions: mp}
 		_, err := runCLI(
 			t, e, "auth", "complete",
 			"https://q.trap.jp/callback?code=abc&state=s",

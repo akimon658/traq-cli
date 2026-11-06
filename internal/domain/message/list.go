@@ -8,8 +8,8 @@ import (
 	"github.com/moznion/go-optional"
 	gotraq "github.com/traPtitech/go-traq"
 
+	"github.com/akimon658/traq-cli/internal/domain/traq"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
-	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // List はチャンネルのメッセージ一覧を取得する。

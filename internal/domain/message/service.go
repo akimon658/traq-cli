@@ -1,7 +1,7 @@
 package message
 
 import (
-	"github.com/akimon658/traq-cli/internal/traq"
+	"github.com/akimon658/traq-cli/internal/domain/traq"
 )
 
 // Service はメッセージ操作に必要な常駐依存を束ねる。

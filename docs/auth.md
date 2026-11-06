@@ -51,7 +51,7 @@ traQ サーバー上 (q.trap.jp) に traq-cli 用の OAuth2 クライアント�
 - confidential: オフ
 - スコープ: `read`, `write` (将来用に `manage_bot` も申請してよい)
 
-発行された client_id は実装では `internal/traq` に定数として埋め込み、self-host・検証環境のために `--client-id` フラグ、および `TRAQ_CLIENT_ID` 環境変数で上書きできるようにする。
+発行された client_id は実装では `internal/domain/auth` に定数として埋め込み、self-host・検証環境のために `--client-id` フラグ、および `TRAQ_CLIENT_ID` 環境変数で上書きできるようにする。
 
 ## ブラウザログインフロー (RFC 8252 authorization code + PKCE)
 
@@ -149,8 +149,10 @@ keyring (macOS Keychain など, service 名は `traq-cli`) を優先し、対応
 ## パッケージ構成
 
 パッケージ全体の構成と依存方向は [`architecture.md`](./architecture.md) を参照すること。
-traQ との通信 (`Token` / `Store` / トークン解決 / API 実行 / login 手順) は `internal/traq/` に集約し、
-認証に関わる汎用部品 (PKCE / コールバックサーバー / セッション保存) は `internal/auth/` に置く。
+認証の関心の Port (`Token` / `Store` / `SessionStore` / PKCE / スコープ等) は `internal/domain/auth/`、
+traQ API の関心の Port (`Client` / クエリ型) は `internal/domain/traq/` に置く。
+traQ との通信実装 (トークン解決 / API 実行 / login 手順) は `internal/infrastructure/traq/`、
+トークン保存は `internal/infrastructure/credential/`、セッション保存は `internal/infrastructure/session/` に置く。
 主要依存: `spf13/cobra`, `traPtitech/go-traq`, `99designs/keyring`。PKCE とトークン交換は標準ライブラリで自前実装する。
 
 ## エラーと終了コード
