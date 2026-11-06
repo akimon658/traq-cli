@@ -7,7 +7,7 @@ import (
 
 	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/traq"
+	"github.com/akimon658/traq-cli/internal/domain/traq"
 )
 
 // Entry は表示用に解決済みの未読1件分。

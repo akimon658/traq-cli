@@ -12,8 +12,8 @@ import (
 
 	gotraq "github.com/traPtitech/go-traq"
 
+	"github.com/akimon658/traq-cli/internal/domain/traq"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
-	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // DownloadResult は保存したファイルの情報。

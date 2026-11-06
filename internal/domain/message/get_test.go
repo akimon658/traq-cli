@@ -8,8 +8,8 @@ import (
 	gotraq "github.com/traPtitech/go-traq"
 	"go.uber.org/mock/gomock"
 
+	"github.com/akimon658/traq-cli/internal/domain/traq"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
-	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 func TestService_Get(t *testing.T) {

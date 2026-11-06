@@ -12,8 +12,8 @@ import (
 	"github.com/moznion/go-optional"
 	"github.com/traPtitech/go-traq"
 
+	itraq "github.com/akimon658/traq-cli/internal/domain/traq"
 	"github.com/akimon658/traq-cli/internal/foundation/text"
-	itraq "github.com/akimon658/traq-cli/internal/traq"
 )
 
 // MessageRenderer はメッセージ表示に必要な遅延解決を束ねる。

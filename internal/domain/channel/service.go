@@ -6,8 +6,8 @@ import (
 	gotraq "github.com/traPtitech/go-traq"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/akimon658/traq-cli/internal/domain/traq"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
-	"github.com/akimon658/traq-cli/internal/traq"
 )
 
 // Service はチャンネル操作に必要な常駐依存を束ねる。

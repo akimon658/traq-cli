@@ -8,7 +8,7 @@ import (
 
 	gotraq "github.com/traPtitech/go-traq"
 
-	"github.com/akimon658/traq-cli/internal/traq"
+	"github.com/akimon658/traq-cli/internal/domain/traq"
 )
 
 // WriteMyUserDetail は自分のユーザー詳細を可読性の高いテキストで出力する。

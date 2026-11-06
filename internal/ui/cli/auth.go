@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/akimon658/traq-cli/internal/auth"
+	"github.com/akimon658/traq-cli/internal/domain/auth"
 	"github.com/akimon658/traq-cli/internal/foundation/config"
 	"github.com/akimon658/traq-cli/internal/foundation/exit"
-	"github.com/akimon658/traq-cli/internal/traq"
+	infratraq "github.com/akimon658/traq-cli/internal/infrastructure/traq"
 	"github.com/akimon658/traq-cli/internal/ui/view"
 )
 
@@ -96,7 +96,7 @@ func runLogin(cmd *cobra.Command, newEnv func() *config.Env, flags *globalFlags)
 	if err != nil {
 		return err
 	}
-	svc := traq.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+	svc := newService(e)
 
 	if cmd.Flags().Changed("token") {
 		if manual {
@@ -126,7 +126,7 @@ func runLogin(cmd *cobra.Command, newEnv func() *config.Env, flags *globalFlags)
 
 // browserLogin はブラウザログインに必要な常駐依存を束ねる。
 type browserLogin struct {
-	svc         *traq.Service
+	svc         *infratraq.Service
 	openBrowser func(string)
 	out         io.Writer
 }
@@ -145,7 +145,7 @@ func (b browserLogin) run(
 		return err
 	}
 	b.openBrowser(sess.AuthorizeURL)
-	ctx, cancel := context.WithTimeout(ctx, traq.LoginTimeout)
+	ctx, cancel := context.WithTimeout(ctx, infratraq.LoginTimeout)
 	defer cancel()
 	code, err := sess.Callback.Wait(ctx)
 	if err != nil {
@@ -154,7 +154,7 @@ func (b browserLogin) run(
 		}
 		return err
 	}
-	t, venue, err := b.svc.FinishLogin(ctx, traq.FinishRequest{
+	t, venue, err := b.svc.FinishLogin(ctx, infratraq.FinishRequest{
 		Code:           code,
 		RedirectURI:    sess.RedirectURI,
 		Verifier:       sess.PKCE.Verifier,
@@ -166,7 +166,7 @@ func (b browserLogin) run(
 	return view.WriteLoginSuccessWithScopes(b.out, t, venue)
 }
 
-func runManualLogin(svc *traq.Service, scopeFlag string, out io.Writer) error {
+func runManualLogin(svc *infratraq.Service, scopeFlag string, out io.Writer) error {
 	authorizeURL, err := svc.StartManualLogin(scopeFlag)
 	if err != nil {
 		return err
@@ -175,7 +175,7 @@ func runManualLogin(svc *traq.Service, scopeFlag string, out io.Writer) error {
 }
 
 func runComplete(ctx context.Context, cmd *cobra.Command, e *config.Env, callback string) error {
-	svc := traq.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+	svc := newService(e)
 	t, venue, err := svc.CompleteManualLogin(ctx, callback)
 	if err != nil {
 		return err
@@ -184,7 +184,7 @@ func runComplete(ctx context.Context, cmd *cobra.Command, e *config.Env, callbac
 }
 
 func runLogout(cmd *cobra.Command, e *config.Env) error {
-	svc := traq.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+	svc := newService(e)
 	warning, err := svc.Logout(cmd.Context())
 	if err != nil {
 		return err
@@ -196,7 +196,7 @@ func runLogout(cmd *cobra.Command, e *config.Env) error {
 }
 
 func runStatus(cmd *cobra.Command, e *config.Env) error {
-	svc := traq.NewService(e.Origin, e.ClientID, e.LoadStore(), e.LoadSessions())
+	svc := newService(e)
 	st, err := svc.Status(cmd.Context(), e.TokenOverride, e.AccessToken)
 	if err != nil {
 		return err
