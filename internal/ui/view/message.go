@@ -461,17 +461,15 @@ func (r *MessageRenderer) formatStampItems(
 		})
 		name := r.stampName(ctx, a.stampID)
 		item := fmt.Sprintf(":%s: ×%d", name, a.sum)
-		if len(a.users) > 0 {
-			labels := make([]string, 0, len(a.users))
-			for _, u := range a.users {
-				label := r.stampUserName(ctx, u.userID)
-				if u.count > 1 {
-					label += fmt.Sprintf(" (%d)", u.count)
-				}
-				labels = append(labels, label)
+		labels := make([]string, 0, len(a.users))
+		for _, u := range a.users {
+			label := r.stampUserName(ctx, u.userID)
+			if u.count > 1 {
+				label += fmt.Sprintf(" (%d)", u.count)
 			}
-			item += " " + strings.Join(labels, ", ")
+			labels = append(labels, label)
 		}
+		item += " " + strings.Join(labels, ", ")
 		parts = append(parts, item)
 	}
 	return parts
