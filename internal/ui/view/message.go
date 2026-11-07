@@ -478,6 +478,8 @@ func (r *MessageRenderer) formatStampItems(
 }
 
 // stampUserName はスタンプを押したユーザーIDから "@name" 表示を返す。
+// スタンプ一覧は1行に多数のユーザーが並ぶため、UserLabel の "@name (DisplayName)"
+// ではなく表示名を省いた "@name" のみにして出力を簡素にする。
 // 解決失敗時は「不明なユーザー」に倒し、IDはstderrの警告にのみ残す。
 func (r *MessageRenderer) stampUserName(ctx context.Context, id string) string {
 	if r == nil || r.client == nil {
