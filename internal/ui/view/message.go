@@ -386,9 +386,12 @@ func (r *MessageRenderer) formatFile(ctx context.Context, id string) string {
 	return fmt.Sprintf("%s (%s, %d bytes, id:%s)", fi.Name, fi.Mime, fi.Size, fi.Id)
 }
 
+// unknownUserName はスタンプを押したユーザーを解決できなかったときの表示。
+const unknownUserName = "不明なユーザー"
+
 // formatStampItems はスタンプを stampId で集約し、最初に押された順
-// (traQ_S-UI の createStampList と同等) に ":name: ×sum" の一覧で返す。
-// 名前解決の失敗はIDフォールバックに倒すため、エラーを返さない。
+// (traQ_S-UI の createStampList と同等) に ":name: ×sum @user (n), @user" の一覧で返す。
+// ユーザーは押した順に並べ、名前解決の失敗は「不明なユーザー」表示に倒すため、エラーを返さない。
 func (r *MessageRenderer) formatStampItems(
 	ctx context.Context,
 	stamps []traq.MessageStamp,
@@ -396,24 +399,51 @@ func (r *MessageRenderer) formatStampItems(
 	if len(stamps) == 0 {
 		return nil
 	}
+	type userAggregate struct {
+		userID     string
+		count      int32
+		createdAt  time.Time
+		firstIndex int
+	}
 	type aggregated struct {
 		stampID    string
 		sum        int32
 		createdAt  time.Time
 		firstIndex int
+		users      []*userAggregate
+		userByID   map[string]*userAggregate
 	}
 	byID := make(map[string]*aggregated, len(stamps))
 	order := make([]*aggregated, 0, len(stamps))
 	for i, s := range stamps {
 		a, ok := byID[s.StampId]
 		if !ok {
-			a = &aggregated{stampID: s.StampId, createdAt: s.CreatedAt, firstIndex: i}
+			a = &aggregated{
+				stampID:    s.StampId,
+				createdAt:  s.CreatedAt,
+				firstIndex: i,
+				userByID:   make(map[string]*userAggregate),
+			}
 			byID[s.StampId] = a
 			order = append(order, a)
 		} else if s.CreatedAt.Before(a.createdAt) {
 			a.createdAt = s.CreatedAt
 		}
 		a.sum += s.Count
+
+		u, ok := a.userByID[s.UserId]
+		if !ok {
+			u = &userAggregate{
+				userID:     s.UserId,
+				createdAt:  s.CreatedAt,
+				firstIndex: i,
+			}
+			a.userByID[s.UserId] = u
+			a.users = append(a.users, u)
+		} else if s.CreatedAt.Before(u.createdAt) {
+			u.createdAt = s.CreatedAt
+		}
+		u.count += s.Count
 	}
 	sort.SliceStable(order, func(i, j int) bool {
 		if !order[i].createdAt.Equal(order[j].createdAt) {
@@ -423,8 +453,43 @@ func (r *MessageRenderer) formatStampItems(
 	})
 	parts := make([]string, 0, len(order))
 	for _, a := range order {
+		sort.SliceStable(a.users, func(i, j int) bool {
+			if !a.users[i].createdAt.Equal(a.users[j].createdAt) {
+				return a.users[i].createdAt.Before(a.users[j].createdAt)
+			}
+			return a.users[i].firstIndex < a.users[j].firstIndex
+		})
 		name := r.stampName(ctx, a.stampID)
-		parts = append(parts, fmt.Sprintf(":%s: ×%d", name, a.sum))
+		item := fmt.Sprintf(":%s: ×%d", name, a.sum)
+		labels := make([]string, 0, len(a.users))
+		for _, u := range a.users {
+			label := r.stampUserName(ctx, u.userID)
+			if u.count > 1 {
+				label += fmt.Sprintf(" (%d)", u.count)
+			}
+			labels = append(labels, label)
+		}
+		item += " " + strings.Join(labels, ", ")
+		parts = append(parts, item)
 	}
 	return parts
+}
+
+// stampUserName はスタンプを押したユーザーIDから "@name" 表示を返す。
+// スタンプ一覧は1行に多数のユーザーが並ぶため、UserLabel の "@name (DisplayName)"
+// ではなく表示名を省いた "@name" のみにして出力を簡素にする。
+// 解決失敗時は「不明なユーザー」に倒し、IDはstderrの警告にのみ残す。
+func (r *MessageRenderer) stampUserName(ctx context.Context, id string) string {
+	if r == nil || r.client == nil {
+		return unknownUserName
+	}
+	u, err := r.client.GetUserByID(ctx, id)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "warning: failed to resolve user:", err)
+		return unknownUserName
+	}
+	if u.Name == "" {
+		return unknownUserName
+	}
+	return "@" + u.Name
 }

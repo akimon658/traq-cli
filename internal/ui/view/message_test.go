@@ -120,8 +120,8 @@ func TestWriteMessageList(t *testing.T) {
 			Id: "m1", UserId: "u1", Content: "hello",
 			CreatedAt: base, UpdatedAt: base,
 			Stamps: []traq.MessageStamp{
-				{StampId: "s2", Count: 3},
-				{StampId: "s1", Count: 1},
+				{StampId: "s2", UserId: "u1", Count: 3},
+				{StampId: "s1", UserId: "u1", Count: 1},
 			},
 		}}
 
@@ -137,8 +137,8 @@ func TestWriteMessageList(t *testing.T) {
 			"2026-10-17T10:00:00Z @alice id:m1",
 			"  hello",
 			"スタンプ",
-			"  :thank: ×3",
-			"  :ok: ×1",
+			"  :thank: ×3 @alice (3)",
+			"  :ok: ×1 @alice",
 			"",
 		}, "\n")
 		assert.Equal(t, want, buf.String())
@@ -353,7 +353,7 @@ func TestWriteMessageList(t *testing.T) {
 			Msgs: []traq.Message{{
 				Id: "m1", UserId: "u1", Content: content,
 				CreatedAt: base, UpdatedAt: base,
-				Stamps: []traq.MessageStamp{{StampId: "s1", Count: 2}},
+				Stamps: []traq.MessageStamp{{StampId: "s1", UserId: "u1", Count: 2}},
 			}},
 		}))
 		out := buf.String()
@@ -522,22 +522,28 @@ func TestFormatStampItems(t *testing.T) {
 		name   string
 		stamps []traq.MessageStamp
 		names  map[string]string
+		users  map[string]traq.User
 		want   []string
 	}{
 		{
 			name:   "empty",
 			stamps: nil,
 			names:  map[string]string{},
+			users:  map[string]traq.User{},
 			want:   nil,
 		},
 		{
 			name: "preserves API order",
 			stamps: []traq.MessageStamp{
-				{StampId: "s2", Count: 3},
-				{StampId: "s1", Count: 1},
+				{StampId: "s2", UserId: "u1", Count: 3},
+				{StampId: "s1", UserId: "u2", Count: 1},
 			},
 			names: map[string]string{"s1": "ok", "s2": "thank"},
-			want:  []string{":thank: ×3", ":ok: ×1"},
+			users: map[string]traq.User{
+				"u1": {Id: "u1", Name: "alice"},
+				"u2": {Id: "u2", Name: "bob"},
+			},
+			want: []string{":thank: ×3 @alice (3)", ":ok: ×1 @bob"},
 		},
 		{
 			name: "aggregates same stamp across users",
@@ -552,10 +558,32 @@ func TestFormatStampItems(t *testing.T) {
 				},
 			},
 			names: map[string]string{"s1": "ok"},
-			want:  []string{":ok: ×3"},
+			users: map[string]traq.User{
+				"u1": {Id: "u1", Name: "alice"},
+				"u2": {Id: "u2", Name: "bob"},
+			},
+			want: []string{":ok: ×3 @alice, @bob (2)"},
 		},
 		{
-			name: "sorts by earliest createdAt",
+			name: "aggregates same user across entries",
+			stamps: []traq.MessageStamp{
+				{
+					StampId: "s1", UserId: "u1", Count: 1,
+					CreatedAt: time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC),
+				},
+				{
+					StampId: "s1", UserId: "u1", Count: 2,
+					CreatedAt: time.Date(2026, 10, 17, 10, 1, 0, 0, time.UTC),
+				},
+			},
+			names: map[string]string{"s1": "ok"},
+			users: map[string]traq.User{
+				"u1": {Id: "u1", Name: "alice"},
+			},
+			want: []string{":ok: ×3 @alice (3)"},
+		},
+		{
+			name: "sorts by earliest createdAt and pressed order",
 			stamps: []traq.MessageStamp{
 				{
 					StampId: "sW", UserId: "u1", Count: 1,
@@ -571,15 +599,32 @@ func TestFormatStampItems(t *testing.T) {
 				},
 			},
 			names: map[string]string{"sW": "w", "sS": "sayonara-nya"},
-			want:  []string{":sayonara-nya: ×2", ":w: ×1"},
+			users: map[string]traq.User{
+				"u1": {Id: "u1", Name: "alice"},
+				"u2": {Id: "u2", Name: "bob"},
+				"u3": {Id: "u3", Name: "carol"},
+			},
+			want: []string{":sayonara-nya: ×2 @bob, @carol", ":w: ×1 @alice"},
 		},
 		{
 			name: "unknown stamp falls back to ID",
 			stamps: []traq.MessageStamp{
-				{StampId: "s9", Count: 2},
+				{StampId: "s9", UserId: "u1", Count: 2},
 			},
 			names: map[string]string{},
-			want:  []string{":s9: ×2"},
+			users: map[string]traq.User{
+				"u1": {Id: "u1", Name: "alice"},
+			},
+			want: []string{":s9: ×2 @alice (2)"},
+		},
+		{
+			name: "unknown user falls back to label without ID",
+			stamps: []traq.MessageStamp{
+				{StampId: "s1", UserId: "gone", Count: 2},
+			},
+			names: map[string]string{"s1": "ok"},
+			users: map[string]traq.User{},
+			want:  []string{":ok: ×2 不明なユーザー (2)"},
 		},
 	}
 	for _, tt := range tests {
@@ -587,6 +632,7 @@ func TestFormatStampItems(t *testing.T) {
 			t.Parallel()
 			mc := itraq.NewMockClient(gomock.NewController(t))
 			stubStamps(mc, tt.names)
+			stubUsers(mc, tt.users)
 			stubSelf(mc, "", nil)
 			r := newTestRenderer(mc, time.UTC)
 			assert.Equal(t, tt.want, r.formatStampItems(t.Context(), tt.stamps))
