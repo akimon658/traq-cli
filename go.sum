@@ -372,6 +372,8 @@ github.com/testcontainers/testcontainers-go v0.44.0 h1:/Fwh6HY1mIikhnm9e7HwoxGyc
 github.com/testcontainers/testcontainers-go v0.44.0/go.mod h1:IcnwQrYTO86xHXu5bvMaBH7ATlbS3Qn1M1QWW3c66rE=
 github.com/testcontainers/testcontainers-go/modules/compose v0.44.0 h1:8YcW51jhgpkkiRVe10Wj9TCBthJmoNpU2fK5WSf7TQ8=
 github.com/testcontainers/testcontainers-go/modules/compose v0.44.0/go.mod h1:0du5YaH5n8Of4bDM/RwIt421Q14kvqrXZ0mB8EjuMoo=
+github.com/tetratelabs/wazero v1.12.0 h1:DuWcpNu/FzgEXgGBDp8J1Spc+CWOvvtvVyjKlaZopYU=
+github.com/tetratelabs/wazero v1.12.0/go.mod h1:LvKtzl2RqO4gyF27BiXU+nKAjcV8f38U+kP/q2vgxh0=
 github.com/theupdateframework/go-tuf v0.7.0 h1:CqbQFrWo1ae3/I0UCblSbczevCCbS31Qvs5LdxRWqRI=
 github.com/theupdateframework/go-tuf/v2 v2.4.2 h1:w7976/W8uTwlsegP5nRymlpjPgrwSh+AXUf85is6nJk=
 github.com/theupdateframework/go-tuf/v2 v2.4.2/go.mod h1:JqBrIUnNLAaNq/8GmBcEMFWfAFBbqp/MkJEJseXKbks=
@@ -393,6 +395,16 @@ github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab h1:H6aJ0yKQ0gF49Q
 github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab/go.mod h1:ulncasL3N9uLrVann0m+CDlJKWsIAP34MPcOJF6VRvc=
 github.com/traPtitech/go-traq v0.0.0-20261026061505-75237f7bff71 h1:xq4Bt2fpCebd41FT7foE6nO0YHfAN23YFN6ud0TIhwU=
 github.com/traPtitech/go-traq v0.0.0-20261026061505-75237f7bff71/go.mod h1:D7NRbLYlvMey05bV+3Yqea6+Onj0ACmMgLuvP7+far8=
+github.com/traPtitech/traq-flavored-markdown/packages/core/go v0.3.0 h1:yBto91TZnS9OlmJyLGGEZP7ec45GxxpHUo0QSJouCuc=
+github.com/traPtitech/traq-flavored-markdown/packages/core/go v0.3.0/go.mod h1:HrPF8E76T5W5VQrmI+VHsBWjp7FhhO7Q7x4ZH5y7oNo=
+github.com/traPtitech/traq-flavored-markdown/packages/plugins/commonmark/go v0.3.0 h1:M0XCpUtyE9p+i/sbdCrC1m4JcTNsTw9OuJK381L8nzE=
+github.com/traPtitech/traq-flavored-markdown/packages/plugins/commonmark/go v0.3.0/go.mod h1:9fmkR/6/adPaHxmygEYQT58TjZMozmYc4m/Eds4/e8A=
+github.com/traPtitech/traq-flavored-markdown/packages/plugins/extensions/go v0.3.0 h1:C1oZESECNDllyDdZbtqNGwkzwC8vXr4LQ73jGCleSyw=
+github.com/traPtitech/traq-flavored-markdown/packages/plugins/extensions/go v0.3.0/go.mod h1:e0a7z1meubFI1rKxKTUrNRy9F7WQvX30gxRFnDVz02w=
+github.com/traPtitech/traq-flavored-markdown/packages/plugins/traq/go v0.3.0 h1:5MwSvQr5T1xL2sfP0iXoVthK+xoV4BG0n68FiAvpzjU=
+github.com/traPtitech/traq-flavored-markdown/packages/plugins/traq/go v0.3.0/go.mod h1:2BEvKbmGbHAypENjDbx7AhujfFyn566hEnuuOZth/t0=
+github.com/traPtitech/traq-flavored-markdown/packages/sdk/go v0.3.0 h1:g0wMNEeAocfsk4hUxFg4jU2ZZ2MCb2RUgoAixjTRR+k=
+github.com/traPtitech/traq-flavored-markdown/packages/sdk/go v0.3.0/go.mod h1:10aG/rkmK477dFJ2Rk7M2FTufmy8DsU5PZzPrLImmW4=
 github.com/transparency-dev/formats v0.1.1 h1:4bVHJc+KdBgpA1OJD1yjI+g0i5Z1graCppTMH8lWKJI=
 github.com/transparency-dev/formats v0.1.1/go.mod h1:qtZ8goRuJ8FTBG9c9+Bj0rn2rUG7eG/AUTkr+Aw3jFw=
 github.com/transparency-dev/merkle v0.0.2 h1:Q9nBoQcZcgPamMkGn7ghV8XiTZ/kRxn1yCG81+twTK4=
@@ -466,8 +478,8 @@ golang.org/x/sys v0.0.0-20210331175145-43e1dd70ce54/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20210616094352-59db8d763f22/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220412211240-33da011f77ad/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.1.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
-golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 golang.org/x/term v0.45.0 h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=
 golang.org/x/term v0.45.0/go.mod h1:9aqxs0blBcrm/n0L9QW0aRVD+ktan8ssZromtqJC43w=
 golang.org/x/text v0.41.0 h1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=

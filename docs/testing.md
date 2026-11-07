@@ -8,7 +8,9 @@
 
 ## 層とモック境界
 
-- `foundation`・`view`・`Validate`・`Parse` 系: 純粋な引数→戻り値の検証。モックなし
+- `foundation`・`view` の `Validate`・`Parse` 系: 純粋な引数→戻り値の検証。モックなし
+- `foundation/text` の WASM 境界: テストでは呼ばない。自前ロジック (ソース書き換え・2パス協調) は関数注入とフィクスチャで検証する
+- `ui/view`: `foundation/text.MockParser` (mockgen 生成) でパース結果を差し替え、レイアウト・目印・エラー伝播を検証する。パース自体の正しさは見ない
 - `domain`: `domain/traq.Client` (実装は `infrastructure/traq.ClientImpl`) を mockgen 生成の `MockClient` で差し替える。API 越し・表示は見ない
 - `infrastructure/traq`: 実 traQ (Testcontainers) への薄い往復で検証する。`Store` は `domain/auth` の `MockStore` を使う。PKCE・コールバック・セッション等の純粋部品は `domain/auth` の単体に委ねる
 - `domain/auth`・`infrastructure/credential`・`infrastructure/session`: PKCE・`ParseCallback`・`Token`・`Store`・`SessionStore` の単体。traQ 通信の知識は持たない
