@@ -46,7 +46,7 @@ services:
       start_period: 30s
 
   mariadb:
-    image: mariadb:10.11.19@sha256:7db29378d4fdab73f8123bbc2b48905c90d1a4b00cf848b028f1e81e623257f2
+    image: mariadb:10.11.19@sha256:7d829180b5b2a9ba74f6242876ab401a0d7dd338a807e522ef92bc9698760f20
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: traq
