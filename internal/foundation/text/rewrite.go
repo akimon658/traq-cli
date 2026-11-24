@@ -1,6 +1,7 @@
 package text
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -156,17 +157,26 @@ func (w rewriter) isSelf(n nodeRef) bool {
 	}
 }
 
+// mentionEmbed は !{} 埋め込みのソース JSON に対応する。
+// フィールド順を正準形 type,raw,id に固定し、map 再符号化によるキー並べ替えを避ける。
+type mentionEmbed struct {
+	Type string `json:"type"`
+	Raw  string `json:"raw"`
+	ID   string `json:"id"`
+}
+
 // markSelfMention は !{...} 埋め込みの raw に目印を後置する。
 func markSelfMention(literal string) (string, error) {
-	var obj map[string]any
+	var obj mentionEmbed
 	if err := json.Unmarshal([]byte(strings.TrimPrefix(literal, "!")), &obj); err != nil {
 		return "", fmt.Errorf("text: cannot parse embed JSON: %w", err)
 	}
-	raw, _ := obj["raw"].(string)
-	obj["raw"] = raw + selfMentionMarker
-	enc, err := json.Marshal(obj)
-	if err != nil {
+	obj.Raw += selfMentionMarker
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(obj); err != nil {
 		return "", fmt.Errorf("text: cannot encode embed JSON: %w", err)
 	}
-	return "!" + string(enc), nil
+	return "!" + string(bytes.TrimRight(buf.Bytes(), "\n")), nil
 }
