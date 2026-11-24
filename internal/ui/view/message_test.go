@@ -16,6 +16,7 @@ import (
 	"github.com/traPtitech/go-traq"
 
 	itraq "github.com/akimon658/traq-cli/internal/domain/traq"
+	"github.com/akimon658/traq-cli/internal/foundation/text"
 )
 
 const (
@@ -56,9 +57,52 @@ func stubSelf(mc *itraq.MockClient, selfID string, groups map[string]struct{}) {
 	mc.EXPECT().GetSelfIDAndGroups(gomock.Any()).Return(selfID, groups, nil).AnyTimes()
 }
 
-func newTestRenderer(mc *itraq.MockClient, loc *time.Location) *MessageRenderer {
+func newTestRenderer(
+	mc *itraq.MockClient,
+	loc *time.Location,
+	parser text.Parser,
+) *MessageRenderer {
 	mc.EXPECT().Origin().Return(testOrigin).AnyTimes()
-	return NewMessageRenderer(mc, loc)
+	return NewMessageRenderer(mc, loc, parser)
+}
+
+// passthroughParser は本文をそのまま返す MockParser を作る。
+// パース結果に依存しないレイアウト系テスト用。
+func passthroughParser(t *testing.T) *text.MockParser {
+	t.Helper()
+	mp := text.NewMockParser(gomock.NewController(t))
+	mp.EXPECT().Parse(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, in text.ParseInput) (text.Parsed, error) {
+			return text.Parsed{Body: in.Content}, nil
+		},
+	).AnyTimes()
+	mp.EXPECT().ParseQuote(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, in text.ParseInput) (text.Parsed, error) {
+			return text.Parsed{Body: in.Content}, nil
+		},
+	).AnyTimes()
+	return mp
+}
+
+// parsedParser は固定の解析結果を返す MockParser を作る。
+func parsedParser(
+	t *testing.T,
+	top text.Parsed,
+	quote text.Parsed,
+) *text.MockParser {
+	t.Helper()
+	mp := text.NewMockParser(gomock.NewController(t))
+	mp.EXPECT().Parse(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ text.ParseInput) (text.Parsed, error) {
+			return top, nil
+		},
+	).AnyTimes()
+	mp.EXPECT().ParseQuote(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ text.ParseInput) (text.Parsed, error) {
+			return quote, nil
+		},
+	).AnyTimes()
+	return mp
 }
 
 func TestWriteMessageList(t *testing.T) {
@@ -73,7 +117,7 @@ func TestWriteMessageList(t *testing.T) {
 		})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		// 取得順は desc (新しい順) を想定
 		msgs := []traq.Message{
 			{
@@ -106,6 +150,33 @@ func TestWriteMessageList(t *testing.T) {
 		}, "\n")
 		assert.Equal(t, want, buf.String())
 	})
+	t.Run("trailing blank lines trimmed", func(t *testing.T) {
+		t.Parallel()
+		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{
+			"u1": {Id: "u1", Name: "alice", DisplayName: "alice"},
+		})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		mp := parsedParser(t, text.Parsed{Body: "hello\n\n"}, text.Parsed{})
+		r := newTestRenderer(mc, time.UTC, mp)
+		var buf bytes.Buffer
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
+			Label: "#general", Limit: 10, Order: "desc",
+			Msgs: []traq.Message{
+				{Id: "m1", UserId: "u1", Content: "hello", CreatedAt: base, UpdatedAt: base},
+			},
+		}))
+		want := strings.Join([]string{
+			"#general (1件 limit=10 offset=0 order=desc)",
+			"",
+			"2026-10-17T10:00:00Z @alice id:m1",
+			"  hello",
+			"",
+		}, "\n")
+		assert.Equal(t, want, buf.String())
+	})
 	t.Run("stamps", func(t *testing.T) {
 		t.Parallel()
 		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
@@ -115,7 +186,7 @@ func TestWriteMessageList(t *testing.T) {
 		})
 		stubStamps(mc, map[string]string{"s1": "ok", "s2": "thank"})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		msgs := []traq.Message{{
 			Id: "m1", UserId: "u1", Content: "hello",
 			CreatedAt: base, UpdatedAt: base,
@@ -150,7 +221,7 @@ func TestWriteMessageList(t *testing.T) {
 		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		msgs := []traq.Message{
 			{Id: "m1", UserId: "u1", Content: "read", CreatedAt: base, UpdatedAt: base},
 			{
@@ -191,7 +262,7 @@ func TestWriteMessageList(t *testing.T) {
 		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general",
@@ -213,7 +284,7 @@ func TestWriteMessageList(t *testing.T) {
 		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		msgs := []traq.Message{
 			{Id: "m1", UserId: "u1", Content: "unread-1", CreatedAt: base, UpdatedAt: base},
 			{
@@ -257,7 +328,7 @@ func TestWriteMessageList(t *testing.T) {
 		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general",
@@ -278,7 +349,7 @@ func TestWriteMessageList(t *testing.T) {
 	t.Run("unread only no unread", func(t *testing.T) {
 		t.Parallel()
 		mc := itraq.NewMockClient(gomock.NewController(t))
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label:      "#general",
@@ -296,7 +367,7 @@ func TestWriteMessageList(t *testing.T) {
 		stubUsers(mc, map[string]traq.User{})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		var buf bytes.Buffer
 		err := r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
@@ -319,7 +390,7 @@ func TestWriteMessageList(t *testing.T) {
 		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, jst)
+		r := newTestRenderer(mc, jst, passthroughParser(t))
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
@@ -344,14 +415,17 @@ func TestWriteMessageList(t *testing.T) {
 			Id: "m2", UserId: "u2", Content: "quoted body",
 			CreatedAt: qtime, UpdatedAt: qtime,
 		}, nil).AnyTimes()
-		r := newTestRenderer(mc, time.UTC)
-		content := "hi " + `!{"type":"user","raw":"@carol","id":"u2"}` + "\n" +
-			`!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
+		mp := parsedParser(
+			t,
+			text.Parsed{Body: "hi @carol", QuoteIDs: []string{testQuoteID1}},
+			text.Parsed{Body: "quoted body"},
+		)
+		r := newTestRenderer(mc, time.UTC, mp)
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
 			Msgs: []traq.Message{{
-				Id: "m1", UserId: "u1", Content: content,
+				Id: "m1", UserId: "u1", Content: "raw content",
 				CreatedAt: base, UpdatedAt: base,
 				Stamps: []traq.MessageStamp{{StampId: "s1", UserId: "u1", Count: 2}},
 			}},
@@ -361,7 +435,6 @@ func TestWriteMessageList(t *testing.T) {
 		assert.Contains(t, out, "  hi @carol")
 		assert.Contains(t, out, "引用 @carol (Carol) 2026-10-16T09:00:00Z id:m2")
 		assert.Contains(t, out, "  quoted body")
-		assert.NotContains(t, out, `"type"`)
 	})
 	t.Run("quote fetch failure", func(t *testing.T) {
 		t.Parallel()
@@ -372,17 +445,55 @@ func TestWriteMessageList(t *testing.T) {
 		stubSelf(mc, "", nil)
 		mc.EXPECT().GetMessage(gomock.Any(), testQuoteID1).
 			Return(nil, errors.New("gone")).AnyTimes()
-		r := newTestRenderer(mc, time.UTC)
-		content := `!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
+		mp := parsedParser(
+			t,
+			text.Parsed{Body: "", QuoteIDs: []string{testQuoteID1}},
+			text.Parsed{},
+		)
+		r := newTestRenderer(mc, time.UTC, mp)
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
 			Msgs: []traq.Message{{
-				Id: "m1", UserId: "u1", Content: content,
+				Id: "m1", UserId: "u1", Content: "raw content",
 				CreatedAt: base, UpdatedAt: base,
 			}},
 		}))
 		assert.Contains(t, buf.String(), "引用 (取得失敗 id:"+testQuoteID1+")")
+	})
+	t.Run("quote empty body", func(t *testing.T) {
+		t.Parallel()
+		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		qtime := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{
+			"u1": {Id: "u1", Name: "alice", DisplayName: "alice"},
+			"u2": {Id: "u2", Name: "carol", DisplayName: "Carol"},
+		})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		mc.EXPECT().GetMessage(gomock.Any(), testQuoteID1).Return(&traq.Message{
+			Id: "m2", UserId: "u2", Content: "raw quoted",
+			CreatedAt: qtime, UpdatedAt: qtime,
+		}, nil).AnyTimes()
+		// 引用本文が空のときはヘッダーのみ表示する。
+		mp := parsedParser(
+			t,
+			text.Parsed{Body: "hi", QuoteIDs: []string{testQuoteID1}},
+			text.Parsed{Body: "\n\n"},
+		)
+		r := newTestRenderer(mc, time.UTC, mp)
+		var buf bytes.Buffer
+		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
+			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
+			Msgs: []traq.Message{{
+				Id: "m1", UserId: "u1", Content: "raw content",
+				CreatedAt: base, UpdatedAt: base,
+			}},
+		}))
+		out := buf.String()
+		assert.Contains(t, out, "引用 @carol (Carol) 2026-10-16T09:00:00Z id:m2")
+		assert.NotContains(t, out, "引用 @carol (Carol) 2026-10-16T09:00:00Z id:m2\n  ")
 	})
 	t.Run("file section", func(t *testing.T) {
 		t.Parallel()
@@ -394,14 +505,17 @@ func TestWriteMessageList(t *testing.T) {
 		mc.EXPECT().GetFileMeta(gomock.Any(), testFileID1).Return(&traq.FileInfo{
 			Id: testFileID1, Name: "report.pdf", Mime: "application/pdf", Size: 12345,
 		}, nil).AnyTimes()
-		r := newTestRenderer(mc, time.UTC)
-		content := "doc\n" +
-			`!{"type":"file","raw":"r","id":"` + testFileID1 + `"}`
+		mp := parsedParser(
+			t,
+			text.Parsed{Body: "doc", FileIDs: []string{testFileID1}},
+			text.Parsed{},
+		)
+		r := newTestRenderer(mc, time.UTC, mp)
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
 			Msgs: []traq.Message{{
-				Id: "m1", UserId: "u1", Content: content,
+				Id: "m1", UserId: "u1", Content: "raw content",
 				CreatedAt: base, UpdatedAt: base,
 			}},
 		}))
@@ -417,7 +531,7 @@ func TestWriteMessageList(t *testing.T) {
 		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "", nil)
-		r := newTestRenderer(mc, time.UTC)
+		r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "search \"foo\"", Limit: 10, Offset: 0, Sort: "-createdAt",
@@ -440,16 +554,20 @@ func TestWriteMessageList(t *testing.T) {
 		})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "me", map[string]struct{}{"g1": {}})
-		r := newTestRenderer(mc, time.UTC)
-		content := `hi !{"type":"user","raw":"@alice","id":"me"}` +
-			` and !{"type":"user","raw":"@bob","id":"u2"}` +
-			` and !{"type":"group","raw":"@team","id":"g1"}` +
-			` and !{"type":"group","raw":"@other","id":"g2"}`
+		mp := parsedParser(
+			t,
+			text.Parsed{
+				Body:          "hi @alice [to you] and @bob and @team [to you] and @other",
+				SelfMentioned: true,
+			},
+			text.Parsed{},
+		)
+		r := newTestRenderer(mc, time.UTC, mp)
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
 			Msgs: []traq.Message{{
-				Id: "m1", UserId: "u2", Content: content,
+				Id: "m1", UserId: "u2", Content: "raw content",
 				CreatedAt: base, UpdatedAt: base,
 			}},
 		}))
@@ -464,14 +582,17 @@ func TestWriteMessageList(t *testing.T) {
 		stubUsers(mc, map[string]traq.User{"u2": {Id: "u2", Name: "bob", DisplayName: "bob"}})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "me", map[string]struct{}{"g1": {}})
-		r := newTestRenderer(mc, time.UTC)
-		content := `hi !{"type":"user","raw":"@bob","id":"u2"}` +
-			` and !{"type":"group","raw":"@other","id":"g2"}`
+		mp := parsedParser(
+			t,
+			text.Parsed{Body: "hi @bob and @other"},
+			text.Parsed{},
+		)
+		r := newTestRenderer(mc, time.UTC, mp)
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Order: "desc",
 			Msgs: []traq.Message{{
-				Id: "m1", UserId: "u2", Content: content,
+				Id: "m1", UserId: "u2", Content: "raw content",
 				CreatedAt: base, UpdatedAt: base,
 			}},
 		}))
@@ -489,18 +610,21 @@ func TestWriteMessageList(t *testing.T) {
 		})
 		stubStamps(mc, map[string]string{})
 		stubSelf(mc, "me", nil)
-		quotedContent := `hi !{"type":"user","raw":"@alice","id":"me"}`
 		mc.EXPECT().GetMessage(gomock.Any(), testQuoteID1).Return(&traq.Message{
-			Id: "q1", UserId: "u2", Content: quotedContent,
+			Id: "q1", UserId: "u2", Content: "raw quoted",
 			CreatedAt: base, UpdatedAt: base,
 		}, nil).AnyTimes()
-		r := newTestRenderer(mc, time.UTC)
-		content := `!{"type":"message","raw":"q","id":"` + testQuoteID1 + `"}`
+		mp := parsedParser(
+			t,
+			text.Parsed{Body: "", QuoteIDs: []string{testQuoteID1}},
+			text.Parsed{Body: "hi @alice [to you]"},
+		)
+		r := newTestRenderer(mc, time.UTC, mp)
 		var buf bytes.Buffer
 		require.NoError(t, r.WriteMessageList(t.Context(), &buf, MessageList{
 			Label: "#general", Limit: 10, Offset: 0, Order: "desc",
 			Msgs: []traq.Message{{
-				Id: "m1", UserId: "u2", Content: content,
+				Id: "m1", UserId: "u2", Content: "raw content",
 				CreatedAt: base, UpdatedAt: base,
 			}},
 		}))
@@ -513,6 +637,75 @@ func TestWriteMessageList(t *testing.T) {
 			"id:m1 [to you]",
 			"header must not light up from a quoted mention",
 		)
+	})
+	t.Run("parse error", func(t *testing.T) {
+		t.Parallel()
+		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		mp := text.NewMockParser(gomock.NewController(t))
+		mp.EXPECT().Parse(gomock.Any(), gomock.Any()).
+			Return(text.Parsed{}, errors.New("parse failed")).AnyTimes()
+		r := newTestRenderer(mc, time.UTC, mp)
+		var buf bytes.Buffer
+		err := r.WriteMessageList(t.Context(), &buf, MessageList{
+			Label: "#general", Limit: 10, Order: "desc",
+			Msgs: []traq.Message{
+				{Id: "m1", UserId: "u1", Content: "hello", CreatedAt: base, UpdatedAt: base},
+			},
+		})
+		require.Error(t, err)
+	})
+	t.Run("quote parse error", func(t *testing.T) {
+		t.Parallel()
+		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{
+			"u1": {Id: "u1", Name: "alice", DisplayName: "alice"},
+			"u2": {Id: "u2", Name: "carol", DisplayName: "carol"},
+		})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		mc.EXPECT().GetMessage(gomock.Any(), testQuoteID1).Return(&traq.Message{
+			Id: "q1", UserId: "u2", Content: "raw quoted",
+			CreatedAt: base, UpdatedAt: base,
+		}, nil).AnyTimes()
+		mp := text.NewMockParser(gomock.NewController(t))
+		mp.EXPECT().Parse(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, in text.ParseInput) (text.Parsed, error) {
+				return text.Parsed{Body: in.Content, QuoteIDs: []string{testQuoteID1}}, nil
+			},
+		).AnyTimes()
+		mp.EXPECT().ParseQuote(gomock.Any(), gomock.Any()).
+			Return(text.Parsed{}, errors.New("quote parse failed")).AnyTimes()
+		r := newTestRenderer(mc, time.UTC, mp)
+		var buf bytes.Buffer
+		err := r.WriteMessageList(t.Context(), &buf, MessageList{
+			Label: "#general", Limit: 10, Order: "desc",
+			Msgs: []traq.Message{
+				{Id: "m1", UserId: "u1", Content: "hello", CreatedAt: base, UpdatedAt: base},
+			},
+		})
+		require.Error(t, err)
+	})
+	t.Run("missing parser", func(t *testing.T) {
+		t.Parallel()
+		base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+		mc := itraq.NewMockClient(gomock.NewController(t))
+		stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+		stubStamps(mc, map[string]string{})
+		stubSelf(mc, "", nil)
+		r := newTestRenderer(mc, time.UTC, nil)
+		var buf bytes.Buffer
+		err := r.WriteMessageList(t.Context(), &buf, MessageList{
+			Label: "#general", Limit: 10, Order: "desc",
+			Msgs: []traq.Message{
+				{Id: "m1", UserId: "u1", Content: "hello", CreatedAt: base, UpdatedAt: base},
+			},
+		})
+		require.Error(t, err)
 	})
 }
 
@@ -634,7 +827,7 @@ func TestFormatStampItems(t *testing.T) {
 			stubStamps(mc, tt.names)
 			stubUsers(mc, tt.users)
 			stubSelf(mc, "", nil)
-			r := newTestRenderer(mc, time.UTC)
+			r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 			assert.Equal(t, tt.want, r.formatStampItems(t.Context(), tt.stamps))
 		})
 	}
@@ -654,8 +847,9 @@ func TestFormatQuoteUserNotFoundFallback(t *testing.T) {
 		CreatedAt: base,
 		UpdatedAt: base,
 	}, nil).AnyTimes()
-	r := newTestRenderer(mc, time.UTC)
-	lines := r.formatQuote(t.Context(), "q1")
+	r := newTestRenderer(mc, time.UTC, passthroughParser(t))
+	lines, err := r.formatQuote(t.Context(), "q1")
+	require.NoError(t, err)
 	out := strings.Join(lines, "\n")
 	assert.Contains(t, out, "(ユーザー解決失敗 id:gone)")
 	assert.NotContains(
@@ -665,6 +859,28 @@ func TestFormatQuoteUserNotFoundFallback(t *testing.T) {
 		"fallback must not collide with a real user name",
 	)
 	assert.Contains(t, out, "quoted text")
+}
+
+func TestFormatQuoteParseError(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	mc := itraq.NewMockClient(gomock.NewController(t))
+	stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+	stubStamps(mc, map[string]string{})
+	stubSelf(mc, "", nil)
+	mc.EXPECT().GetMessage(gomock.Any(), "q1").Return(&traq.Message{
+		Id:        "q1",
+		UserId:    "u1",
+		Content:   "quoted text",
+		CreatedAt: base,
+		UpdatedAt: base,
+	}, nil).AnyTimes()
+	mp := text.NewMockParser(gomock.NewController(t))
+	mp.EXPECT().ParseQuote(gomock.Any(), gomock.Any()).
+		Return(text.Parsed{}, errors.New("quote parse failed")).AnyTimes()
+	r := newTestRenderer(mc, time.UTC, mp)
+	_, err := r.formatQuote(t.Context(), "q1")
+	require.Error(t, err)
 }
 
 func TestWriteChannelLabel(t *testing.T) {
@@ -681,7 +897,7 @@ func TestWriteGetMessage(t *testing.T) {
 	stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
 	stubStamps(mc, map[string]string{})
 	stubSelf(mc, "", nil)
-	r := newTestRenderer(mc, time.UTC)
+	r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 	var buf bytes.Buffer
 	require.NoError(t, r.WriteGetMessage(t.Context(), &buf, GetViewParams{
 		Label: "#general",
@@ -707,7 +923,7 @@ func TestWriteSingleMessage(t *testing.T) {
 	stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
 	stubStamps(mc, map[string]string{})
 	stubSelf(mc, "", nil)
-	r := newTestRenderer(mc, time.UTC)
+	r := newTestRenderer(mc, time.UTC, passthroughParser(t))
 	var buf bytes.Buffer
 	require.NoError(t, r.WriteSingleMessage(t.Context(), &buf, SingleViewParams{
 		Msg: traq.Message{
@@ -721,4 +937,24 @@ func TestWriteSingleMessage(t *testing.T) {
 		"",
 	}, "\n")
 	assert.Equal(t, want, buf.String())
+}
+
+func TestWriteSingleMessageParseError(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	mc := itraq.NewMockClient(gomock.NewController(t))
+	stubUsers(mc, map[string]traq.User{"u1": {Id: "u1", Name: "alice", DisplayName: "alice"}})
+	stubStamps(mc, map[string]string{})
+	stubSelf(mc, "", nil)
+	mp := text.NewMockParser(gomock.NewController(t))
+	mp.EXPECT().Parse(gomock.Any(), gomock.Any()).
+		Return(text.Parsed{}, errors.New("parse failed")).AnyTimes()
+	r := newTestRenderer(mc, time.UTC, mp)
+	var buf bytes.Buffer
+	require.Error(t, r.WriteSingleMessage(t.Context(), &buf, SingleViewParams{
+		Msg: traq.Message{
+			Id: "m1", UserId: "u1", Content: "hello",
+			CreatedAt: base, UpdatedAt: base,
+		},
+	}))
 }

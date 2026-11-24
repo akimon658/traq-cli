@@ -8,7 +8,9 @@ traq-cli のパッケージ構成と設計意図を定める。責務ごとに�
 cmd/traq/                    エントリポイント。ui/cli.Execute() を呼ぶだけ
 internal/foundation/config/  実行設定 Env と既定値解決 (TRAQ_* 環境変数)
 internal/foundation/exit/    終了コードと ExitCodeError
-internal/foundation/text/    埋め込み解決の純粋パーサ。副作用なし
+internal/foundation/text/    traq-flavored-markdown へのファサード。WASM ランタイムを保持し、
+                              メッセージ本文の解析 (MessageText・引用・添付ID抽出) を委譲する。
+                              自分宛メンションの目印付与と引用・添付埋め込みの表示用除去だけを自前で行う
 internal/domain/auth/        認証の関心の Port。Token / Store / SessionStore インターフェース、
                              ManualSession / PKCE / スコープ / コールバック解析などの純粋物。
                              go-traq も infrastructure も import しない
@@ -50,7 +52,7 @@ foundation/config → domain/auth のみ (infrastructure を知らない)
 
 レイヤー:
 
-- `foundation`: 横断的基盤。`exit` / `text` は無依存、`config` は `domain/auth` の Port 型のみ保持する
+- `foundation`: 横断的基盤。`exit` は無依存、`config` は `domain/auth` の Port 型のみ保持する (infrastructure を知らない)。`text` は traq-flavored-markdown の Go バインディング (WASM ランタイム) に依存し、`Close` での解放が必要
 - `domain/auth` は認証・資格情報の Port のみを持ち、traQ 通信の知識を持たない。`config` を import しない
 - `domain/traq` は traQ API の Port のみを持ち、保存や HTTP の知識を持たない
 - `infrastructure/traq` は traQ との通信関心を集約する。`Service` (常駐依存 + 対象別 LRU キャッシュ) と `ClientImpl` (解決済みトークンに束縛された認証済みクライアント) を持ち、
@@ -65,7 +67,7 @@ foundation/config → domain/auth のみ (infrastructure を知らない)
 - ドメインサービス (`domain/channel` / `domain/message` / `domain/file`) はデータを返す。表示は `view` に任せ、`view` を import しない
 - ドメインサービスは `config.Env` を保持しない。必要な値 (`domain/traq.Client`) はコンストラクタの明示引数で受け取る。`origin` は重ねて保持せず、`Client.Origin()` を正典とする
 - `infrastructure/traq.Service` はコマンド毎に `ui/cli` で1個作り (`resolveClient` 内)、`WithToken` で束縛した `domain/traq.Client` をドメインサービス間で共有する
-- `ui/view` は `io.Writer` への出力と表示用の遅延解決を行う。`MessageRenderer` が `domain/traq.Client` を保持し、ユーザー・スタンプ・引用・添付・自ユーザー解決は描画時に行い、失敗時はIDフォールバック表示に倒す。入力型は `domain` の型を参照する
+- `ui/view` は `io.Writer` への出力と表示用の遅延解決を行う。`MessageRenderer` が `domain/traq.Client` と `foundation/text.Parser` を保持し、ユーザー・スタンプ・引用・添付の解決失敗はIDフォールバック表示に倒す。本文の解析失敗はエラーを返し、呼び出し元で終了コード1に倒す。入力型は `domain` の型を参照する。テストでは `Parser` を mockgen 生成のモックに差し替える
 - `domain/traq.Client` が唯一の API 実行経路。401 時の refresh・保存・リトライは `infrastructure/traq.ClientImpl` 内に集約されており、呼び出し元は通常のメソッド呼び出しと同じ形で書ける。一覧系と ID 単位の取得は対象別 LRU に保持される
 - 終了コードと `exit.Error` は `foundation/exit` が定義する。`infrastructure/traq` やドメインサービスはこれを返し、`ui/cli.Execute` がコードに変換する
 
@@ -100,4 +102,4 @@ foundation/config (Env 解決) → infrastructure/traq (トークン解決・認
 ## 表示方針
 
 - `ui/view` の出力は `MessageRenderer` メソッドの `WriteXxx(ctx, w, ...)` の形に統一する
-- `ui/view` は `domain/traq.Client` の遅延解決と整形を行う。解決失敗はIDフォールバック表示に倒す。チャンネルパス解決は `infrastructure/traq` が、メッセージ埋め込み解決は `foundation/text` が担当する
+- `ui/view` は `domain/traq.Client` の遅延解決と整形を行う。本文解析は `foundation/text.Parser` (traq-flavored-markdown) に任せ、表示用の目印付与と末尾空行の整形だけを自前で行う。チャンネルパス解決は `infrastructure/traq` が担当する。`MessageRenderer` と `Parser` の生成・解放は `ui/cli` の配線で行う

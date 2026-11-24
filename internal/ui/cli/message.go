@@ -2,7 +2,6 @@ package cli
 
 import (
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -52,7 +51,12 @@ func newMessageCmd(
 			if err != nil {
 				return err
 			}
-			return view.NewMessageRenderer(api, time.Local).WriteSingleMessage(
+			renderer, err := newMessageRenderer(cmd.Context(), api)
+			if err != nil {
+				return err
+			}
+			defer closeRenderer(cmd, renderer)
+			return renderer.WriteSingleMessage(
 				cmd.Context(), cmd.OutOrStdout(), view.SingleViewParams{Msg: res.Msg},
 			)
 		},
@@ -95,7 +99,12 @@ func newMessageGetCmd(
 			if err != nil {
 				return err
 			}
-			return view.NewMessageRenderer(api, time.Local).WriteGetMessage(
+			renderer, err := newMessageRenderer(cmd.Context(), api)
+			if err != nil {
+				return err
+			}
+			defer closeRenderer(cmd, renderer)
+			return renderer.WriteGetMessage(
 				cmd.Context(), cmd.OutOrStdout(), view.GetViewParams{
 					Label: res.ChannelLabel,
 					Msg:   res.Msg,
@@ -168,7 +177,12 @@ bot トークンでは未読が生成されないため、常に未読0件にな
 			if err != nil {
 				return err
 			}
-			return view.NewMessageRenderer(api, time.Local).WriteMessageList(
+			renderer, err := newMessageRenderer(cmd.Context(), api)
+			if err != nil {
+				return err
+			}
+			defer closeRenderer(cmd, renderer)
+			return renderer.WriteMessageList(
 				cmd.Context(), cmd.OutOrStdout(), view.ListViewParams{
 					Label:      res.Label,
 					Limit:      res.Limit,

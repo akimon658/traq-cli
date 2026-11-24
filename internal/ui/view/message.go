@@ -2,6 +2,7 @@ package view
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,17 +18,24 @@ import (
 )
 
 // MessageRenderer はメッセージ表示に必要な遅延解決を束ねる。
-// Client はコンストラクタで固定し、要求ごとの値はメソッド引数で受ける。
+// Client と Parser はコンストラクタで固定し、要求ごとの値はメソッド引数で受ける。
 // ユーザー・スタンプ・引用・添付の解決失敗はIDフォールバック表示に倒し、全体エラーにしない。
+// 本文の解析失敗はエラーを返し、呼び出し元で終了コード1に倒す。
 type MessageRenderer struct {
 	client itraq.Client
 	loc    *time.Location
 	origin string
+	parser text.Parser
 }
 
 // NewMessageRenderer はメッセージ表示器を作る。
 // loc が nil なら time.Local、origin は client.Origin() を正典とする。
-func NewMessageRenderer(client itraq.Client, loc *time.Location) *MessageRenderer {
+// parser はメッセージ本文の解析器で、nil は不可。
+func NewMessageRenderer(
+	client itraq.Client,
+	loc *time.Location,
+	parser text.Parser,
+) *MessageRenderer {
 	if loc == nil {
 		loc = time.Local
 	}
@@ -35,7 +43,15 @@ func NewMessageRenderer(client itraq.Client, loc *time.Location) *MessageRendere
 	if client != nil {
 		origin = client.Origin()
 	}
-	return &MessageRenderer{client: client, loc: loc, origin: origin}
+	return &MessageRenderer{client: client, loc: loc, origin: origin, parser: parser}
+}
+
+// Close は保持するパーサを解放する。
+func (r *MessageRenderer) Close(ctx context.Context) error {
+	if r == nil || r.parser == nil {
+		return nil
+	}
+	return r.parser.Close(ctx)
 }
 
 // MessageList はメッセージ表示に必要な情報をまとめた DTO。
@@ -165,7 +181,11 @@ func (r *MessageRenderer) WriteMessageList(
 		if i == dividerAt {
 			blocks = append(blocks, divider)
 		}
-		blocks = append(blocks, r.formatMessage(ctx, msg))
+		block, err := r.formatMessage(ctx, msg)
+		if err != nil {
+			return err
+		}
+		blocks = append(blocks, block)
 	}
 	// 未読はあるが、その先頭がこのページに含まれない場合は注記だけ出す。
 	if divider != "" && dividerAt < 0 {
@@ -188,7 +208,11 @@ func (r *MessageRenderer) WriteSingleMessage(
 	w io.Writer,
 	params SingleViewParams,
 ) error {
-	_, err := fmt.Fprintln(w, r.formatMessage(ctx, params.Msg))
+	block, err := r.formatMessage(ctx, params.Msg)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(w, block)
 	return err
 }
 
@@ -266,16 +290,85 @@ func (r *MessageRenderer) stampName(ctx context.Context, id string) string {
 	return name
 }
 
-// formatMessage はメッセージ1件を表示用ブロックに整形する。
-// 解決失敗はフォールバック表示に倒すため、エラーを返さない。
-func (r *MessageRenderer) formatMessage(ctx context.Context, msg traq.Message) string {
-	loc := time.Local
-	if r != nil && r.loc != nil {
-		loc = r.loc
-	}
+// parseInput は本文解析の入力を束ねる。origin は renderer の保持値を正典とする。
+func (r *MessageRenderer) parseInput(
+	content, selfID string,
+	groups map[string]struct{},
+) text.ParseInput {
 	origin := ""
 	if r != nil {
 		origin = r.origin
+	}
+	return text.ParseInput{Content: content, Origin: origin, SelfID: selfID, Groups: groups}
+}
+
+// parseBody はトップレベル本文用に解析する。
+func (r *MessageRenderer) parseBody(
+	ctx context.Context,
+	in text.ParseInput,
+) (text.Parsed, error) {
+	if r == nil || r.parser == nil {
+		return text.Parsed{}, errors.New("view: text parser is not configured")
+	}
+	return r.parser.Parse(ctx, in)
+}
+
+// parseQuoteBody は引用本文 (1段目) 用に解析する。
+func (r *MessageRenderer) parseQuoteBody(
+	ctx context.Context,
+	in text.ParseInput,
+) (text.Parsed, error) {
+	if r == nil || r.parser == nil {
+		return text.Parsed{}, errors.New("view: text parser is not configured")
+	}
+	return r.parser.ParseQuote(ctx, in)
+}
+
+// bodyLines は表示用本文を行に分け、末尾の空行を取り除く。
+// ライブラリの MessageText は末尾改行を保持するため、表示時に整える。
+func bodyLines(body string) []string {
+	lines := strings.Split(body, "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+// quoteBodyLines は引用本文用に行分けし、前後の空行を取り除く。
+func quoteBodyLines(body string) []string {
+	lines := strings.Split(body, "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+// indentLines は空行以外に2スペースのインデントを付ける。
+func indentLines(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			out = append(out, "")
+		} else {
+			out = append(out, "  "+line)
+		}
+	}
+	return out
+}
+
+// formatMessage はメッセージ1件を表示用ブロックに整形する。
+// 解決失敗はフォールバック表示に倒すため、本文解析以外の失敗ではエラーを返さない。
+// 本文解析の失敗はエラーを返す。
+func (r *MessageRenderer) formatMessage(
+	ctx context.Context,
+	msg traq.Message,
+) (string, error) {
+	loc := time.Local
+	if r != nil && r.loc != nil {
+		loc = r.loc
 	}
 	header := fmt.Sprintf(
 		"%s %s id:%s",
@@ -291,27 +384,26 @@ func (r *MessageRenderer) formatMessage(ctx context.Context, msg traq.Message) s
 	}
 
 	selfID, groups := r.selfInfo(ctx)
-	clean := text.CleanContentWithHighlight(msg.Content, origin, selfID, groups)
-	if clean.SelfMentioned {
+	parsed, err := r.parseBody(ctx, r.parseInput(msg.Content, selfID, groups))
+	if err != nil {
+		return "", err
+	}
+	if parsed.SelfMentioned {
 		header += " [to you]"
 	}
 
 	lines := []string{header}
-	if clean.Body != "" {
-		for _, line := range strings.Split(clean.Body, "\n") {
-			if line == "" {
-				lines = append(lines, "")
-			} else {
-				lines = append(lines, "  "+line)
-			}
+	lines = append(lines, indentLines(bodyLines(parsed.Body))...)
+	for _, qid := range parsed.QuoteIDs {
+		quote, err := r.formatQuote(ctx, qid)
+		if err != nil {
+			return "", err
 		}
+		lines = append(lines, quote...)
 	}
-	for _, qid := range clean.QuoteIDs {
-		lines = append(lines, r.formatQuote(ctx, qid)...)
-	}
-	if len(clean.FileIDs) > 0 {
+	if len(parsed.FileIDs) > 0 {
 		lines = append(lines, "添付ファイル")
-		for _, fid := range clean.FileIDs {
+		for _, fid := range parsed.FileIDs {
 			lines = append(lines, "  "+r.formatFile(ctx, fid))
 		}
 	}
@@ -321,13 +413,17 @@ func (r *MessageRenderer) formatMessage(ctx context.Context, msg traq.Message) s
 			lines = append(lines, "  "+it)
 		}
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), nil
 }
 
 // formatQuote は引用1件分の行群を返す。取得失敗時はヘッダー1行のみ。
-func (r *MessageRenderer) formatQuote(ctx context.Context, quoteID string) []string {
+// 本文解析の失敗時はエラーを返す。
+func (r *MessageRenderer) formatQuote(
+	ctx context.Context,
+	quoteID string,
+) ([]string, error) {
 	if r == nil || r.client == nil {
-		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", quoteID)}
+		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", quoteID)}, nil
 	}
 	qm, err := r.client.GetMessage(ctx, quoteID)
 	if err != nil || qm == nil {
@@ -339,7 +435,7 @@ func (r *MessageRenderer) formatQuote(ctx context.Context, quoteID string) []str
 				"warning: failed to resolve quoted message: nil message id:"+quoteID,
 			)
 		}
-		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", quoteID)}
+		return []string{fmt.Sprintf("引用 (取得失敗 id:%s)", quoteID)}, nil
 	}
 	loc := time.Local
 	if r.loc != nil {
@@ -357,16 +453,11 @@ func (r *MessageRenderer) formatQuote(ctx context.Context, quoteID string) []str
 	}
 	lines := []string{header}
 	selfID, groups := r.selfInfo(ctx)
-	if body := text.RenderQuoteBodyWithHighlight(qm.Content, selfID, groups); body != "" {
-		for _, line := range strings.Split(body, "\n") {
-			if line == "" {
-				lines = append(lines, "")
-			} else {
-				lines = append(lines, "  "+line)
-			}
-		}
+	parsed, err := r.parseQuoteBody(ctx, r.parseInput(qm.Content, selfID, groups))
+	if err != nil {
+		return nil, err
 	}
-	return lines
+	return append(lines, indentLines(quoteBodyLines(parsed.Body))...), nil
 }
 
 // formatFile は添付ファイル1件の表示行を返す。取得失敗時はフォールバック表示。

@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"time"
-
 	"github.com/moznion/go-optional"
 	"github.com/spf13/cobra"
 
@@ -86,7 +84,12 @@ func newMessageSearchCmd(
 			if err != nil {
 				return err
 			}
-			return view.NewMessageRenderer(api, time.Local).WriteMessageList(
+			renderer, err := newMessageRenderer(cmd.Context(), api)
+			if err != nil {
+				return err
+			}
+			defer closeRenderer(cmd, renderer)
+			return renderer.WriteMessageList(
 				cmd.Context(), cmd.OutOrStdout(), view.SearchViewParams{
 					Label:     res.Label,
 					Limit:     res.Limit,
